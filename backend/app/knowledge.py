@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import current_employee
+from app.catalog_import import apply as apply_catalog_import, preview as preview_catalog_import, read_catalog
 from app.db import get_db
 from app.copying import clone_test_content
 from app.google_documents import GoogleReadError, snapshot_google_nodes
@@ -15,6 +16,26 @@ from app.models import Article, ArticleRevision, Department, Employee, FolderArt
 from app.permissions import require_role
 
 router = APIRouter(tags=["knowledge"])
+
+
+class CatalogImportConfirmation(BaseModel):
+    confirmed: bool
+
+
+@router.get("/admin/knowledge/catalog-import/preview")
+def catalog_import_preview(db: Session = Depends(get_db), employee: Employee = Depends(require_role("admin"))):
+    records, warnings = read_catalog()
+    return preview_catalog_import(db, records, warnings)
+
+
+@router.post("/admin/knowledge/catalog-import")
+def catalog_import_confirm(body: CatalogImportConfirmation, db: Session = Depends(get_db),
+                           employee: Employee = Depends(require_role("admin"))):
+    if not body.confirmed:
+        raise HTTPException(400, "Подтвердите однократный импорт")
+    records, warnings = read_catalog()
+    result = apply_catalog_import(db, records, employee.id)
+    return {**result, "warnings": warnings}
 
 
 class NewFolder(BaseModel):
@@ -49,6 +70,11 @@ class PublishRevision(BaseModel):
     row_version: int = Field(ge=1)
     completion_mode: str = Field(default="acknowledge", pattern="^(acknowledge|full_test)$")
     copy_test_id: uuid.UUID | None = None
+
+
+class WithdrawRevision(BaseModel):
+    reason: str = Field(min_length=1, max_length=20000)
+    confirmed: bool
 
 
 class MoveArticle(BaseModel):
@@ -219,7 +245,8 @@ def read_article(article_id: uuid.UUID, db: Session = Depends(get_db), employee:
     if article is None:
         raise HTTPException(404)
     placement = next((row for row in placements if row.article_id == article_id), None)
-    revisions = db.scalars(select(ArticleRevision).where(ArticleRevision.article_id == article_id).order_by(ArticleRevision.revision_no.desc())).all()
+    revisions = db.scalars(select(ArticleRevision).where(ArticleRevision.article_id == article_id,
+        ArticleRevision.deleted_at.is_(None)).order_by(ArticleRevision.revision_no.desc())).all()
     return {**article_data(article, placement.folder_id if placement else None),
             "revisions": [{"id": str(row.id), "number": row.revision_no, "date": row.revision_date.isoformat(),
                            "description": row.description} for row in revisions]}
@@ -330,6 +357,8 @@ def list_revisions(article_id: uuid.UUID, db: Session = Depends(get_db), _actor:
         TestDefinition.article_revision_id.in_([revision.id for revision in rows]))).all()} if rows else {}
     return [{"id": str(row.id), "number": row.revision_no, "date": row.revision_date.isoformat(),
              "description": row.description, "published_at": row.published_at.isoformat(),
+             "deleted_at": row.deleted_at.isoformat() if row.deleted_at else None,
+             "delete_reason": row.delete_reason,
              "completion_mode": "full_test" if row.id in tests else "acknowledge",
              "test_id": str(tests[row.id]) if row.id in tests else None} for row in rows]
 
@@ -337,7 +366,8 @@ def list_revisions(article_id: uuid.UUID, db: Session = Depends(get_db), _actor:
 @router.get("/admin/revisions/assignable")
 def assignable_revisions(db: Session = Depends(get_db), _actor: Employee = Depends(require_role("teacher"))):
     rows = db.execute(select(ArticleRevision, Article).join(Article, Article.id == ArticleRevision.article_id)
-        .where(Article.owner_course_id.is_(None)).order_by(ArticleRevision.published_at.desc())).all()
+        .where(Article.owner_course_id.is_(None), ArticleRevision.deleted_at.is_(None))
+        .order_by(ArticleRevision.published_at.desc())).all()
     return [{"id": str(revision.id), "article_title": article.title,
              "number": revision.revision_no, "date": revision.revision_date.isoformat()}
             for revision, article in rows]
@@ -385,6 +415,28 @@ def publish_revision(article_id: uuid.UUID, payload: PublishRevision, db: Sessio
     return {"id": str(revision.id), "number": revision.revision_no,
             "date": revision.revision_date.isoformat(), "description": revision.description,
             "completion_mode": payload.completion_mode, "test_id": str(test.id) if test else None}
+
+
+@router.post("/admin/knowledge/articles/{article_id}/revisions/{revision_id}/withdraw")
+def withdraw_revision(article_id: uuid.UUID, revision_id: uuid.UUID, payload: WithdrawRevision,
+                      db: Session = Depends(get_db), actor: Employee = Depends(require_role("admin"))):
+    if not payload.confirmed:
+        raise HTTPException(422, "Confirm revision withdrawal")
+    reason = payload.reason.strip()
+    if not reason:
+        raise HTTPException(422, "Reason is required")
+    revision = db.scalar(select(ArticleRevision).where(ArticleRevision.id == revision_id,
+        ArticleRevision.article_id == article_id).with_for_update())
+    if revision is None:
+        raise HTTPException(404)
+    if revision.deleted_at is not None:
+        raise HTTPException(409, "Revision already withdrawn")
+    revision.deleted_at = datetime.now(timezone.utc)
+    revision.deleted_by = actor.id
+    revision.delete_reason = reason
+    db.commit()
+    return {"id": str(revision.id), "deleted_at": revision.deleted_at.isoformat(),
+            "delete_reason": revision.delete_reason}
 
 
 @router.post("/admin/knowledge/grants", status_code=201)

@@ -30,7 +30,7 @@ def test_private_uploaded_audio_requires_article_access():
         db.commit()
     client = TestClient(app)
     headers = {name: {"Cookie": f"rtm_next_session={token}"} for name, token in tokens.items()}
-    folder_id = article_id = asset_id = None
+    folder_id = article_id = asset_id = rutube_id = None
     try:
         folder = client.post("/admin/knowledge/folders", headers=headers["admin"], json={"title": "Media"})
         folder_id = uuid.UUID(folder.json()["id"])
@@ -56,6 +56,19 @@ def test_private_uploaded_audio_requires_article_access():
         assert stream.status_code == 200 and stream.content == fake_mp3
         assert client.post("/admin/media/rutube", headers=headers["admin"], json={
             "url": "https://evil.example/video/123", "title": "Bad"}).status_code == 422
+        private = client.post("/admin/media/rutube", headers=headers["admin"], json={
+            "url": "https://rutube.ru/video/private/aabbccddeeff00112233445566778899/?p=sampleKey123456789",
+            "title": "Private demo"})
+        assert private.status_code == 201, private.text
+        rutube_id = uuid.UUID(private.json()["id"])
+        body["content"].append({"type": "mediaEmbed", "attrs": {"assetId": str(rutube_id)}})
+        assert client.put(f"/admin/knowledge/articles/{article_id}", headers=headers["admin"], json={
+            "title": "Audio article", "summary": "", "body": body, "row_version": 2}).status_code == 200
+        assert client.get(f"/media/{rutube_id}/info", headers=headers["other"]).status_code == 404
+        private_info = client.get(f"/media/{rutube_id}/info", headers=headers["learner"])
+        assert private_info.status_code == 200
+        assert private_info.json()["embed_url"] == (
+            "https://rutube.ru/play/embed/aabbccddeeff00112233445566778899/?p=sampleKey123456789")
     finally:
         with SessionLocal() as db:
             if article_id:
@@ -66,6 +79,8 @@ def test_private_uploaded_audio_requires_article_access():
                 db.execute(delete(KnowledgeFolder).where(KnowledgeFolder.id == folder_id))
             if asset_id:
                 db.execute(delete(MediaAsset).where(MediaAsset.id == asset_id))
+            if rutube_id:
+                db.execute(delete(MediaAsset).where(MediaAsset.id == rutube_id))
             db.execute(delete(BrowserSession).where(BrowserSession.employee_id.in_(ids)))
             db.execute(delete(Employee).where(Employee.id.in_(ids)))
             db.commit()

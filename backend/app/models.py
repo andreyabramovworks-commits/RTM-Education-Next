@@ -23,6 +23,8 @@ class Employee(Base):
     bitrix_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     local_role: Mapped[str] = mapped_column(String(20), nullable=False, default="employee")
     department_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     @property
@@ -166,6 +168,9 @@ class ArticleRevision(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     body_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("identity.employees.id"))
+    delete_reason: Mapped[str | None] = mapped_column(Text)
 
 
 class RoleChangeAudit(Base):

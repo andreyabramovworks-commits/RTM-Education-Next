@@ -15,6 +15,7 @@ from app.media import router as media_router
 from app.settings import router as settings_router
 from app.google_reader import router as google_reader_router
 from app.profile import router as profile_router
+from app.review_center import router as review_center_router
 
 app = FastAPI(title="RTM Education Next")
 app.include_router(auth_router)
@@ -31,6 +32,7 @@ app.include_router(media_router)
 app.include_router(settings_router)
 app.include_router(google_reader_router)
 app.include_router(profile_router)
+app.include_router(review_center_router)
 
 
 @app.get("/health")

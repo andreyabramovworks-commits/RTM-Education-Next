@@ -54,7 +54,7 @@
 | REQ-048 | 19.11 попытки и история | Попытки привязаны к назначению; ответы, исправления и решения append-only; X/Y и награда за итоговое Сдан разделены | APPROVED | [TEST_REVIEW_WORKFLOWS.md](TEST_REVIEW_WORKFLOWS.md) | Сверить профильный контракт + QA сценарий |
 | REQ-049 | 19.11 review UX | Вопросы/ответы и медиа, бинарная проверка free-text, комментарии, атомарное Взять в работу | APPROVED | [TEST_REVIEW_WORKFLOWS.md](TEST_REVIEW_WORKFLOWS.md) | Сверить профильный контракт + QA сценарий |
 | REQ-050 | ранние обсуждения способы ознакомления | Подтверждение ознакомления: кнопка, один вопрос или полный тест; факт связан с редакцией, сотрудником, временем/назначением. | APPROVED | [CONTENT_REVISIONS.md](CONTENT_REVISIONS.md) | Сверить профильный контракт + QA сценарий |
-| REQ-051 | 19.11 принять 1–7 | Базовые фильтры и группировки legacy сохраняем, CSV+**реальный** XLSX, фильтры/статистика сервером; корректный процент курса и дедлайны; сохранять состояние интерфейса. | APPROVED | [REVIEW_CENTER_NEXT.md](REVIEW_CENTER_NEXT.md) | Сверить профильный контракт + QA сценарий |
+| REQ-051 | 19.11 принять 1–7 | Базовые фильтры и группировки legacy сохраняем, CSV+**реальный** XLSX, фильтры/статистика сервером; корректный процент курса и дедлайны; сохранять состояние интерфейса. Экспорт заменён REQ-206. | SUPERSEDED | [REVIEW_CENTER_NEXT.md](REVIEW_CENTER_NEXT.md) | ADR-093 |
 | REQ-052 | 19.11 роли и область прав | Преподаватель работает с любым сотрудником компании в рамках утверждённых действий; сервер проверяет роль | APPROVED-CONCEPT | [ACCESS_AND_ROLES.md](ACCESS_AND_ROLES.md) | Сверить профильный контракт + QA сценарий |
 | REQ-053 | 23.11 UI программа курса | Разделы можно создавать и переименовывать | APPROVED | [COURSES_EDITOR_UI.md](COURSES_EDITOR_UI.md) | C02/QA-005 |
 | REQ-054 | 23.11 скрин 3 | Материалы перетаскиваются мышью в пределах секции | APPROVED | [COURSES_EDITOR_UI.md](COURSES_EDITOR_UI.md) | C02/QA-006 |
@@ -143,7 +143,7 @@
 | REQ-137 | 19.11 видео | RUTUBE открытие плеера не объявлять доказанным просмотром без API события | APPROVED-CONCEPT | [KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md](KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md) | QA-004 |
 | REQ-138 | 19.11 server | Next — отдельное окружение от /opt/rtm-app, prod код не менять | APPROVED | [ARCHITECTURE.md](ARCHITECTURE.md) | QA-050 |
 | REQ-139 | 23.11 управление редакциями | Управление редакциями остаётся отдельной админ-вкладкой | APPROVED | [CONTENT_REVISIONS.md](CONTENT_REVISIONS.md) | QA-046 |
-| REQ-140 | 19.11 подтверждение 1-7 | В каждом ревью доступны сроки, фото, ответственные, история, CSV/XLSX, детали | APPROVED | [REVIEW_CENTER_NEXT.md](REVIEW_CENTER_NEXT.md) | RC03-RC09 |
+| REQ-140 | 19.11 подтверждение 1-7 | В каждом ревью доступны сроки, фото, ответственные, история, CSV/XLSX, детали. Экспорт заменён REQ-206. | SUPERSEDED | [REVIEW_CENTER_NEXT.md](REVIEW_CENTER_NEXT.md) | ADR-093 |
 | REQ-141 | Согласование экрана «Программа курса» от 23.11.2026 | Каталог курсов и полноценный редактор с сохранением контекста | APPROVED | [COURSES_EDITOR_UI.md](COURSES_EDITOR_UI.md) | QA-056 |
 | REQ-142 | Согласование экрана «Программа курса» от 23.11.2026 | Одноуровневые разделы, удаление с двумя подтверждаемыми вариантами | APPROVED | [COURSES_EDITOR_UI.md](COURSES_EDITOR_UI.md) | QA-057 |
 | REQ-143 | Согласование экрана «Программа курса» от 23.11.2026 | Drag & Drop за ручку, пустая/свёрнутая цель, без копии/смены UUID | APPROVED | [COURSES_EDITOR_UI.md](COURSES_EDITOR_UI.md) | QA-058 |
@@ -188,7 +188,7 @@
 | REQ-182 | Консолидация спецификации 23.11.2026 | Точный переход теста только со свободными ответами требует решения | OPEN | [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | OPEN-037 |
 | REQ-183 | Консолидация спецификации 23.11.2026 | Автоматический зачёт RUTUBE зависит от доступных событий целевого плеера | OPEN | [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | OPEN-039 |
 | REQ-184 | Консолидация спецификации 23.11.2026 | Название и точный переход первой активации курса требуют решения | OPEN | [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | OPEN-040 |
-| REQ-185 | 25.11.2026 новое решение | Формат исходной таблицы и сопоставление Google file ID для импорта открыты. | OPEN | [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | OPEN-042 |
+| REQ-185 | Ответ пользователя 26.11.2026 | Исходный лист «Каталог документов»: серые жирные строки — корневые папки, синие жирные — вложенные, остальные жирные без ссылки — третий уровень; строки с HTTPS-ссылками — статьи, прочие строки без ссылки пропускаются. Google file ID извлекается из URL Docs/Sheets. | APPROVED | [KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md](KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md) | QA-135 |
 | REQ-186 | Консолидация спецификации 23.11.2026 | Production-путь, домен, volumes и deploy-service требуют решения | OPEN | [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | OPEN-018 |
 | REQ-187 | Консолидация спецификации 23.11.2026 | Google OAuth и права экспорта приватных документов требуют проверки | OPEN | [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | OPEN-019 |
 | REQ-188 | 25.11.2026 новое решение | ACL папки наследуется вниз, отдельная статья открывает путь без соседей. | APPROVED | [KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md](KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md) | QA-125 |
@@ -209,6 +209,7 @@
 | REQ-203 | Ответы пользователя 12–13, 25.11.2026 | Одна папка на статью, ACL folder/article; наследование папки, путь к статье без соседей | APPROVED | [KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md](KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md) | QA-134 |
 | REQ-204 | Ответ пользователя 1, 25.11.2026 | Google Docs из таблицы импортируются однократно, затем раскладываются в БЗ | APPROVED | [KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md](KNOWLEDGE_BASE_AND_VIDEO_LIBRARY.md) | QA-135 |
 | REQ-205 | Уточнение пользователя 25.11.2026 о стартовом виде и разработчике | После входа пользовательская часть; кнопка админки только teacher+; проверенный Bitrix24 ID 36 — защищённый developer, остальные повышенные роли через админку, Bitrix24-admin автоматически admin | APPROVED | [ACCESS_AND_ROLES.md](ACCESS_AND_ROLES.md) | QA-136 |
+| REQ-206 | Прямые сообщения пользователя 26.11.2026 о Центре проверок | Перенять непротиворечащие текущей модели интерфейс и функции старого RTM Обучение: виды по материалам/курсам и сотрудникам, фильтры, статистику, карточки и действия. Не реализовывать выгрузку CSV/XLSX. | APPROVED | [REVIEW_CENTER_NEXT.md](REVIEW_CENTER_NEXT.md) | QA-139; ADR-093 |
 
 ## Контроль спорных/отменённых решений
 

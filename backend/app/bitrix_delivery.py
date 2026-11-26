@@ -100,7 +100,7 @@ def deliver(kind: str, payload: dict, idempotency_key: str, campaign_title: str)
     bitrix_id = int(payload["bitrix_id"])
     if kind == "bitrix_notification":
         result = rest_call("im.notify.personal.add", {"USER_ID": bitrix_id,
-            "MESSAGE": f"Назначено обучение: {campaign_title}. Откройте RTM Обучение Next в Битрикс24.",
+            "MESSAGE": payload.get("message") or f"Назначено обучение: {campaign_title}. Откройте RTM Обучение Next в Битрикс24.",
             "TAG": idempotency_key}, retry_safe=True)
         if not result:
             raise DeliveryError("NOTIFICATION_NOT_CREATED")

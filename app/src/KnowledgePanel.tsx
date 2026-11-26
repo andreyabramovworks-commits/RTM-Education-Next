@@ -167,6 +167,10 @@ export default function KnowledgePanel({ mode, role }: { mode: 'admin' | 'user';
   const [destinationId, setDestinationId] = useState('')
   const [movePreview, setMovePreview] = useState<MovePreview | null>(null)
   const [articleDirty, setArticleDirty] = useState(false)
+  const [importPreview, setImportPreview] = useState<{ folders: number; articles: number;
+    new_folders: number; new_articles: number; external_links: number[];
+    warnings: { row: number; reason: string }[] } | null>(null)
+  const [importBusy, setImportBusy] = useState(false)
   const canEdit = mode === 'admin' && ['editor', 'admin', 'developer'].includes(role)
   const canManage = mode === 'admin' && ['admin', 'developer'].includes(role)
   const selected = catalog.articles.find(article => article.id === articleId)
@@ -199,6 +203,23 @@ export default function KnowledgePanel({ mode, role }: { mode: 'admin' | 'user';
       const folder = await api<Folder>('/admin/knowledge/folders', { method: 'POST', body: JSON.stringify({ title, parent_id: folderId || null }) })
       await reload(); setFolderId(folder.id)
     } catch (e) { setError((e as Error).message) }
+  }
+
+  async function previewImport() {
+    setError(''); setImportBusy(true)
+    try { setImportPreview(await api('/admin/knowledge/catalog-import/preview')) }
+    catch (e) { setError((e as Error).message) }
+    finally { setImportBusy(false) }
+  }
+
+  async function runImport() {
+    if (!importPreview || !window.confirm(`Добавить ${importPreview.new_folders} папок и ${importPreview.new_articles} статей из каталога?`)) return
+    setError(''); setImportBusy(true)
+    try {
+      await api('/admin/knowledge/catalog-import', { method: 'POST', body: JSON.stringify({ confirmed: true }) })
+      setImportPreview(null); await reload()
+    } catch (e) { setError((e as Error).message) }
+    finally { setImportBusy(false) }
   }
 
   async function createArticle() {
@@ -267,8 +288,9 @@ export default function KnowledgePanel({ mode, role }: { mode: 'admin' | 'user';
 
   return <>
     <div className="crumb">{mode === 'admin' ? 'Рабочее пространство / ' : ''}База знаний</div>
-    <div className="heading"><div><h1>База знаний</h1><p>Статьи и папки компании.</p></div>{canManage && <button className="primary" onClick={createFolder}>Создать папку</button>}</div>
+    <div className="heading"><div><h1>База знаний</h1><p>Статьи и папки компании.</p></div>{canManage && <div className="review-actions"><button disabled={importBusy} onClick={previewImport}>Импорт из каталога</button><button className="primary" onClick={createFolder}>Создать папку</button></div>}</div>
     {error && <div role="alert" className="error">{error}</div>}
+    {importPreview && <div className="panel" aria-label="Предпросмотр импорта"><h2>Предпросмотр каталога</h2><p>В таблице: {importPreview.folders} папок и {importPreview.articles} статей. Новых: {importPreview.new_folders} папок и {importPreview.new_articles} статей.</p><p>Внешних ссылок: {importPreview.external_links.length}; строк с ошибкой ссылки или вложенности: {importPreview.warnings.length}.</p>{importPreview.warnings.length > 0 && <details><summary>Показать строки с ошибками</summary>{importPreview.warnings.map(item => <p key={item.row}>Строка {item.row}: {item.reason}</p>)}</details>}<div className="review-actions"><button onClick={() => setImportPreview(null)}>Закрыть</button><button className="primary" disabled={importBusy || importPreview.new_articles + importPreview.new_folders === 0} onClick={runImport}>Добавить новые записи</button></div></div>}
     {loading ? <p>Загружаем базу знаний…</p> : <div className="knowledge-layout">
       <aside className="knowledge-tree" aria-label="Папки"><h2>Папки</h2>{catalog.folders.map(folder => <button key={folder.id} className={folderId === folder.id ? 'selected' : ''} style={{ paddingLeft: 14 + depth(folder) * 16 }} onClick={() => { if (articleDirty && !window.confirm('Есть несохранённые изменения. Покинуть статью?')) return; setArticleDirty(false); setFolderId(folder.id); setArticleId('') }}>{folder.title}</button>)}{catalog.folders.length === 0 && <p>Папок пока нет.</p>}{canManage && folderId && <><button className="grant-link" onClick={() => setGrantTarget({ type: 'folder', id: folderId })}>Открыть доступ к папке</button><button className="grant-link" onClick={() => { setMoveTarget({ type: 'folder', id: folderId }); setDestinationId(''); setMovePreview(null) }}>Переместить папку</button></>}</aside>
       <div className="knowledge-content">{selected ? <><button className="back" onClick={() => { if (articleDirty && !window.confirm('Есть несохранённые изменения. Покинуть статью?')) return; setArticleDirty(false); setArticleId('') }}>← К статьям</button><ArticleView key={selected.id} article={selected} editable={canEdit} onSave={saveArticle} onDirtyChange={setArticleDirty} sourceMode={canEdit ? 'knowledge' : undefined} />{canManage && <><button className="grant-link" onClick={() => setGrantTarget({ type: 'article', id: selected.id })}>Открыть доступ к статье</button><button className="grant-link" onClick={() => { setMoveTarget({ type: 'article', id: selected.id }); setDestinationId(''); setMovePreview(null) }}>Переместить статью</button></>}</> : <><div className="knowledge-actions"><input aria-label="Поиск статей" placeholder="Поиск статей" value={search} onChange={e => setSearch(e.target.value)} />{canEdit && <button className="primary" onClick={createArticle}>Создать статью</button>}</div><div className="table"><table><thead><tr><th>Статья</th><th>Описание</th><th>Изменена</th></tr></thead><tbody>{catalog.articles.filter(article => article.folder_id === folderId && `${article.title} ${article.summary}`.toLocaleLowerCase('ru-RU').includes(search.toLocaleLowerCase('ru-RU'))).map(article => <tr key={article.id} tabIndex={0} onClick={() => setArticleId(article.id)} onKeyDown={e => e.key === 'Enter' && setArticleId(article.id)}><td><b>{article.title}</b></td><td>{article.summary}</td><td>{article.updated_at ? new Date(article.updated_at).toLocaleDateString('ru-RU') : '—'}</td></tr>)}</tbody></table>{catalog.articles.filter(article => article.folder_id === folderId).length === 0 && <div className="empty">В этой папке пока нет статей.</div>}</div></>}</div>

@@ -1,8 +1,39 @@
 import json
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 PORTAL = "rtm-group.bitrix24.ru"
+
+
+class BitrixExpiredToken(Exception):
+    pass
+
+
+def directory_page(method: str, token: str, start: int) -> dict:
+    if method not in {"user.get", "department.get"}:
+        raise ValueError("Unsupported Bitrix directory method")
+    request = Request(
+        f"https://{PORTAL}/rest/{method}.json",
+        data=urlencode({"auth": token, "start": start}).encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urlopen(request, timeout=8) as response:
+            payload = json.load(response)
+    except HTTPError as exc:
+        try:
+            payload = json.load(exc)
+        except (ValueError, OSError):
+            raise exc
+        if isinstance(payload, dict) and payload.get("error") == "expired_token":
+            raise BitrixExpiredToken from exc
+        raise exc
+    if not isinstance(payload, dict):
+        raise ValueError("Bitrix directory response is invalid")
+    if payload.get("error") == "expired_token":
+        raise BitrixExpiredToken
+    return payload
 
 
 def call(method: str, token: str) -> dict:
@@ -40,13 +71,7 @@ def list_users(token: str) -> list[dict]:
     users: list[dict] = []
     start = 0
     while True:
-        request = Request(
-            f"https://{PORTAL}/rest/user.get.json",
-            data=urlencode({"auth": token, "start": start}).encode(),
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        with urlopen(request, timeout=8) as response:
-            payload = json.load(response)
+        payload = directory_page("user.get", token, start)
         page = payload.get("result")
         if not isinstance(page, list):
             raise ValueError("Bitrix employee directory is unavailable")
@@ -63,13 +88,7 @@ def list_departments(token: str) -> list[dict]:
     departments: list[dict] = []
     start = 0
     while True:
-        request = Request(
-            f"https://{PORTAL}/rest/department.get.json",
-            data=urlencode({"auth": token, "start": start}).encode(),
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        with urlopen(request, timeout=8) as response:
-            payload = json.load(response)
+        payload = directory_page("department.get", token, start)
         page = payload.get("result")
         if not isinstance(page, list):
             raise ValueError("Bitrix department structure is unavailable")

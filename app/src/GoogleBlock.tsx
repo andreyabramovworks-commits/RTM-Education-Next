@@ -1,9 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 
-type Block = { type: 'paragraph'; style: string; text: string } | { type: 'table'; rows: string[][] } | { type: 'sheet'; title: string; rows: string[][] }
+type TextRun = { text: string; bold: boolean; italic: boolean; underline: boolean; link: string }
+type Block = { type: 'paragraph'; style: string; text: string; runs?: TextRun[] } | { type: 'table'; rows: string[][] } | { type: 'sheet'; title: string; rows: string[][] }
 type LiveDocument = { title: string; revision_id: string; blocks: Block[]; fetched_at: string }
 type Snapshot = { text: string; fetched_at: string; revision_id: string }
+
+function paragraphContent(block: Extract<Block, { type: 'paragraph' }>) {
+  if (!block.runs) return block.text
+  return block.runs.map((run, index) => {
+    let content: ReactNode = run.text
+    if (run.bold) content = <strong>{content}</strong>
+    if (run.italic) content = <em>{content}</em>
+    if (run.underline) content = <u>{content}</u>
+    if (/^https:\/\//.test(run.link)) content = <a href={run.link} target="_blank" rel="noopener noreferrer">{content}</a>
+    return <span key={index}>{content}</span>
+  })
+}
 
 export default function GoogleBlock({ node, editor, deleteNode, articleId }: NodeViewProps & { articleId: string }) {
   const fileId = String(node.attrs.fileId || '')
@@ -35,7 +48,7 @@ export default function GoogleBlock({ node, editor, deleteNode, articleId }: Nod
       : !document ? <p>Загружаем актуальный документ…</p>
       : <div className="google-document-text">{document.blocks.map((block, index) => block.type === 'table' || block.type === 'sheet'
         ? <div key={index}>{block.type === 'sheet' && <h3>{block.title}</h3>}<table><tbody>{block.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>
-        : /^HEADING_[1-3]$/.test(block.style) ? <h3 key={index}>{block.text}</h3>
-        : <p key={index}>{block.text}</p>)}</div>}
+        : /^HEADING_[1-3]$/.test(block.style) ? <h3 key={index}>{paragraphContent(block)}</h3>
+        : <p key={index}>{paragraphContent(block)}</p>)}</div>}
   </NodeViewWrapper>
 }

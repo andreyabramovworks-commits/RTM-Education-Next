@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import ReviewOverview from './ReviewOverview'
 
 type QueueRow = { id: string; status: string; learner_name: string; campaign_title: string; test_title: string; created_at: string }
 type Question = { id: string; kind: string; prompt: string; image_asset_id: string | null; options: { id: string; text: string; image_asset_id: string | null }[]; correct_option_ids: string[]; submissions: { id: string; version: number; value: { text?: string; option_ids?: string[] }; is_correct: boolean | null; reviews: { decision: string; comment: string; created_at: string }[] }[] }
@@ -110,17 +111,27 @@ export default function ReviewPanel() {
   const rejected = free.some(q => draft[q.id]?.decision === 'rejected')
   return <div className="review-panel">
     <div className="crumb">Рабочее пространство / Центр проверок</div>
-    <div className="heading"><div><h1>Центр проверок</h1><p>Свободные ответы сотрудников, ожидающие решения преподавателя.</p></div></div>
+    <div className="heading"><div><h1>Центр проверок</h1><p>Активные назначения и ответы сотрудников.</p></div></div>
     {error && <div className="error" role="alert">{error}</div>}
     <div className="tabs"><button className={context === 'actions' ? 'active' : ''} onClick={() => { setContext('actions'); setSelected(null) }}>Требует действий</button><button className={context === 'materials' ? 'active' : ''} onClick={() => { setContext('materials'); setSelected(null) }}>Проверка отдельных материалов</button><button className={context === 'courses' ? 'active' : ''} onClick={() => { setContext('courses'); setSelected(null) }}>Проверка курсов обучений</button></div>
-    {context === 'actions' ? <div className="panel"><h2>Требует действий</h2><p>Личная очередь преподавателя появится в следующем выпуске.</p></div> : !selected ? <div className="table"><table><thead><tr><th>Сотрудник</th><th>Назначение</th><th>Тест</th><th>Статус</th><th>Поступило</th></tr></thead><tbody>{rows.map(row => <tr key={row.id} tabIndex={0} onClick={() => open(row.id)} onKeyDown={e => { if (e.key === 'Enter') open(row.id) }}><td>{row.learner_name}</td><td>{row.campaign_title}</td><td>{row.test_title}</td><td>{row.status === 'claimed' ? 'В работе' : 'Ожидает'}</td><td>{new Date(row.created_at).toLocaleString('ru-RU')}</td></tr>)}</tbody></table>{rows.length === 0 && <div className="empty">Новых ответов нет.</div>}</div> : <>
+    {context === 'actions' ? <div className="panel"><h2>Требует действий</h2><p>В будущих версиях здесь будет персональный список действий преподавателя: проверка ответов, напоминания, дополнительные попытки и быстрый переход к сотруднику или курсу.</p></div> : <>
+      <div hidden={Boolean(selected)}><ReviewOverview key={context} context={context} onOpenReview={id => void open(id)} /></div>
+      {!selected ? <>
+      <section className="review-pending"><h2>Свободные ответы на проверке</h2>
+        <div className="table"><table><thead><tr><th>Сотрудник</th><th>Назначение</th><th>Тест</th><th>Статус</th><th>Поступило</th></tr></thead><tbody>{rows.map(row => <tr key={row.id} tabIndex={0} onClick={() => open(row.id)} onKeyDown={e => { if (e.key === 'Enter') open(row.id) }}><td>{row.learner_name}</td><td>{row.campaign_title}</td><td>{row.test_title}</td><td>{row.status === 'claimed' ? 'В работе' : 'Ожидает'}</td><td>{new Date(row.created_at).toLocaleString('ru-RU')}</td></tr>)}</tbody></table>{rows.length === 0 && <div className="empty">Новых ответов нет.</div>}</div>
+      </section>
+    </> : <>
       <button className="back" onClick={() => setSelected(null)}>← К списку</button>
       <div className="heading"><div><h1>{selected.learner_name}</h1><p>{selected.campaign_title} · {selected.test_title}</p></div>{selected.status === 'pending' && <button className="primary" disabled={busy} onClick={claim}>Взять в работу</button>}</div>
       {selected.status === 'claimed' && <div className="review-questions">{selected.questions.map((question, index) => <QuestionReview key={question.id} question={question} number={index + 1} editable={question.kind === 'free_text'} decision={draft[question.id]} onDecision={value => setDraft(current => ({ ...current, [question.id]: value }))} />)}
         {rejected && <div className="panel"><h2>Что вернуть сотруднику</h2><label><input type="radio" checked={returnMode === 'answer_correction'} onChange={() => setReturnMode('answer_correction')} /> Исправить только отклонённые ответы в этой попытке</label><label><input type="radio" checked={returnMode === 'full_retake'} onChange={() => setReturnMode('full_retake')} /> Пройти тест заново</label>{returnMode === 'full_retake' && <div className="allowance"><p>Если лимит попыток исчерпан, укажите причину и выдайте одну дополнительную попытку перед возвратом.</p><input aria-label="Причина дополнительной попытки" value={allowanceReason} onChange={e => setAllowanceReason(e.target.value)} placeholder="Причина дополнительной попытки" /><button disabled={busy || allowanceReason.trim().length < 10} onClick={grantAttempt}>Выдать попытку</button></div>}</div>}
         <div className="review-actions"><button disabled={busy} onClick={save}>Сохранить решения</button><button className="primary" disabled={busy || JSON.stringify(draft) !== JSON.stringify(selected.draft)} onClick={complete}>Завершить проверку</button></div>
       </div>}
-      {selected.status === 'completed' && <div className="panel">Проверка завершена.</div>}
+      {selected.status === 'completed' && <div className="review-questions">
+        <div className="panel"><h2>Проверка завершена</h2><p>Ответы и решения сохранены в истории проверки.</p></div>
+        {selected.questions.map((question, index) => <QuestionReview key={question.id} question={question} number={index + 1} editable={false} onDecision={() => {}} />)}
+      </div>}
+      </>}
     </>}
   </div>
 }

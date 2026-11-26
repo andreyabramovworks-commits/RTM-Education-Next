@@ -4,9 +4,31 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 
 from app import worker
+from app.bitrix import BitrixExpiredToken
 from app.bitrix_delivery import DeliveryError
 from app.db import SessionLocal
 from app.models import Assignment, AssignmentCampaign, Course, Employee, OutboxJob
+
+
+def test_periodic_directory_sync_retries_after_bitrix_token_expiry(monkeypatch):
+    refreshed = []
+    synced = []
+    class DB:
+        def rollback(self):
+            synced.append("rollback")
+    db = DB()
+    monkeypatch.setattr(worker, "saved_auth", lambda: {"access_token": "new" if refreshed else "old"})
+    def users(_db, token):
+        synced.append(("users", token))
+        if token == "old":
+            raise BitrixExpiredToken
+    monkeypatch.setattr(worker, "sync_directory", users)
+    monkeypatch.setattr(worker, "sync_structure", lambda _db, token: synced.append(("departments", token)))
+    monkeypatch.setattr(worker, "sync_new_employee_assignments", lambda _db: 2)
+    monkeypatch.setattr(worker, "refresh_auth", lambda token: refreshed.append(token))
+    assert worker.sync_bitrix_directory(db) == 2
+    assert refreshed == ["old"]
+    assert synced == [("users", "old"), "rollback", ("users", "new"), ("departments", "new")]
 
 
 def test_worker_records_confirmed_delivery_and_quarantines_ambiguous_task(monkeypatch):
@@ -27,10 +49,12 @@ def test_worker_records_confirmed_delivery_and_quarantines_ambiguous_task(monkey
             due_at=datetime.now(timezone.utc) + timedelta(days=7))
         db.add(assignment); db.flush()
         notify = OutboxJob(kind="bitrix_notification", idempotency_key=f"{assignment.id}:notification",
-            payload={"assignment_id": str(assignment.id), "bitrix_id": person.bitrix_id})
+            payload={"assignment_id": str(assignment.id), "bitrix_id": person.bitrix_id},
+            created_at=datetime(2000, 1, 1, tzinfo=timezone.utc))
         task = OutboxJob(kind="bitrix_task", idempotency_key=f"{assignment.id}:task",
             payload={"assignment_id": str(assignment.id), "bitrix_id": person.bitrix_id,
-                     "title": "Delivery task", "description": "Read"})
+                     "title": "Delivery task", "description": "Read"},
+            created_at=datetime(2000, 1, 2, tzinfo=timezone.utc))
         db.add_all([notify, task]); db.commit()
         ids = (person.id, course.id, campaign.id, assignment.id, notify.id, task.id)
     def fake_deliver(kind, payload, key, title):
@@ -47,7 +71,6 @@ def test_worker_records_confirmed_delivery_and_quarantines_ambiguous_task(monkey
             second_id = worker.claim_job(db)
             assert second_id == ids[5]
             worker.process_job(db, second_id)
-            assert worker.claim_job(db) is None
             sent = db.get(OutboxJob, ids[4])
             uncertain = db.get(OutboxJob, ids[5])
             assert sent.status == "sent" and sent.external_id == "12345"

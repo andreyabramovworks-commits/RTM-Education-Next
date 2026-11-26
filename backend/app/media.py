@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -32,6 +32,24 @@ TYPES = {".mp4": ("video", "video/mp4"), ".webm": ("video", "video/webm"),
 class RutubeVideo(BaseModel):
     url: str
     title: str = "Видео RUTUBE"
+
+
+def rutube_embed_url(value: str) -> str:
+    parsed = urlparse(value)
+    if (parsed.scheme != "https" or parsed.hostname not in ("rutube.ru", "www.rutube.ru")
+            or parsed.username or parsed.password or parsed.port or parsed.fragment):
+        raise ValueError("Use a RUTUBE video URL")
+    match = re.fullmatch(r"/(?:video/(private/)?|play/embed/)([A-Za-z0-9]+)/?", parsed.path)
+    if not match:
+        raise ValueError("Unsupported RUTUBE video URL")
+    params = parse_qsl(parsed.query, keep_blank_values=True)
+    if params and (len(params) != 1 or params[0][0] != "p"
+                   or not re.fullmatch(r"[A-Za-z0-9_-]{8,200}", params[0][1])):
+        raise ValueError("Unsupported RUTUBE access key")
+    if match.group(1) and not params:
+        raise ValueError("Private RUTUBE video needs an access key")
+    suffix = f"?p={params[0][1]}" if params else ""
+    return f"https://rutube.ru/play/embed/{match.group(2)}/{suffix}"
 
 
 def valid_signature(extension: str, header: bytes) -> bool:
@@ -141,14 +159,12 @@ async def upload_media(kind: str = Form(), file: UploadFile = File(), db: Sessio
 @router.post("/admin/media/rutube", status_code=201)
 def register_rutube(payload: RutubeVideo, db: Session = Depends(get_db),
                     actor: Employee = Depends(require_role("editor"))):
-    parsed = urlparse(payload.url)
-    if parsed.scheme != "https" or parsed.hostname not in ("rutube.ru", "www.rutube.ru") or parsed.query or parsed.fragment:
-        raise HTTPException(422, "Use a RUTUBE video URL")
-    match = re.fullmatch(r"/(?:video|play/embed)/([A-Za-z0-9]+)/?", parsed.path)
-    if not match:
-        raise HTTPException(422, "Unsupported RUTUBE video URL")
+    try:
+        embed_url = rutube_embed_url(payload.url)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     asset = MediaAsset(kind="video", source_type="rutube", original_filename=payload.title[:240].strip() or "Видео RUTUBE",
-        rutube_url=f"https://rutube.ru/play/embed/{match.group(1)}/", created_by=actor.id)
+        rutube_url=embed_url, created_by=actor.id)
     db.add(asset)
     db.commit()
     return {"id": str(asset.id), "kind": asset.kind, "title": asset.original_filename,

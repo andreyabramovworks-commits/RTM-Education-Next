@@ -153,6 +153,8 @@ def sync_directory_job(access_token: str) -> None:
         with SessionLocal() as db:
             sync_directory(db, access_token)
             sync_structure(db, access_token)
+            from app.campaigns import sync_new_employee_assignments
+            sync_new_employee_assignments(db)
     except (OSError, ValueError, KeyError) as exc:
         logger.warning("Bitrix directory sync failed: %s", exc)
 

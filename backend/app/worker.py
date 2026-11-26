@@ -7,8 +7,11 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.bitrix_delivery import DeliveryError, configured, deliver
+from app.bitrix import BitrixExpiredToken
+from app.bitrix_delivery import DeliveryError, configured, deliver, refresh_auth, saved_auth
+from app.campaigns import sync_new_employee_assignments
 from app.db import SessionLocal
+from app.directory import sync_directory, sync_structure
 from app.models import Assignment, AssignmentCampaign, OutboxJob
 
 logging.basicConfig(level=logging.INFO)
@@ -69,12 +72,29 @@ def process_job(db: Session, job_id: uuid.UUID) -> None:
     db.commit()
 
 
+def sync_bitrix_directory(db: Session) -> int:
+    """Refresh Bitrix users and match newly discovered employees to active campaigns."""
+    for attempt in range(2):
+        auth = saved_auth()
+        try:
+            sync_directory(db, auth["access_token"])
+            sync_structure(db, auth["access_token"])
+            return sync_new_employee_assignments(db)
+        except BitrixExpiredToken:
+            db.rollback()
+            if attempt:
+                raise
+            refresh_auth(auth["access_token"])
+    raise RuntimeError("Bitrix directory refresh loop")
+
+
 def run() -> None:
     if SessionLocal is None:
         raise RuntimeError("DATABASE_URL is required")
     with SessionLocal() as db:
         recover_interrupted_jobs(db)
     warned = False
+    next_directory_sync = time.monotonic()
     while True:
         if not configured():
             if not warned:
@@ -83,6 +103,15 @@ def run() -> None:
             time.sleep(10)
             continue
         warned = False
+        if time.monotonic() >= next_directory_sync:
+            try:
+                with SessionLocal() as db:
+                    added = sync_bitrix_directory(db)
+                logger.info("Bitrix directory synchronized; new campaign assignments: %s", added)
+                next_directory_sync = time.monotonic() + 15 * 60
+            except Exception:
+                logger.exception("Bitrix directory sync failed")
+                next_directory_sync = time.monotonic() + 60
         try:
             with SessionLocal() as db:
                 job_id = claim_job(db)

@@ -34,6 +34,7 @@ def sync_directory(db: Session, access_token: str) -> int:
             "active": active,
             "department_ids": sorted({int(value) for value in user.get("UF_DEPARTMENT", [])
                                       if str(value).isdigit() and int(value) > 0}),
+            "first_seen_at": now,
             "updated_at": now,
         }
         statement = insert(Employee).values(**values).on_conflict_do_update(

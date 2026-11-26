@@ -37,6 +37,42 @@ test('ordinary employee has no admin entry', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Админка' })).toHaveCount(0)
 })
 
+test('administrator previews catalog import before adding entries', async ({ page }) => {
+  let imported = false
+  let calls = 0
+  await page.route('**/education-next/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'dev', name: 'Андрей Абрамов', role: 'developer' } })
+    if (path.endsWith('/admin/knowledge/catalog-import/preview')) return route.fulfill({ json: {
+      folders: 2, articles: 3, new_folders: imported ? 0 : 2, new_articles: imported ? 0 : 3,
+      external_links: [8], warnings: [{ row: 9, reason: 'Ссылка не является HTTPS URL' }],
+    } })
+    if (path.endsWith('/admin/knowledge/catalog-import') && route.request().method() === 'POST') {
+      calls++
+      expect(route.request().postDataJSON()).toEqual({ confirmed: true })
+      imported = true
+      return route.fulfill({ json: { folders: 2, articles: 3, warnings: [] } })
+    }
+    if (path.endsWith('/admin/knowledge')) return route.fulfill({ json: {
+      folders: imported ? [{ id: 'folder-1', parent_id: null, title: 'Импортировано', description: '' }] : [],
+      articles: imported ? [{ id: 'article-1', folder_id: 'folder-1', title: 'Документ', summary: '',
+        body: { type: 'doc', content: [] }, row_version: 1, updated_at: '2026-11-26T12:00:00Z' }] : [],
+    } })
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('button', { name: 'База знаний' }).click()
+  await page.getByRole('button', { name: 'Импорт из каталога' }).click()
+  await expect(page.getByLabel('Предпросмотр импорта')).toContainText('Новых: 2 папок и 3 статей')
+  await expect(page.getByLabel('Предпросмотр импорта')).toContainText('Строка 9')
+  expect(calls).toBe(0)
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Добавить новые записи' }).click()
+  await expect(page.getByRole('button', { name: 'Импортировано' })).toBeVisible()
+  expect(calls).toBe(1)
+})
+
 test('editor copies an article from another course after preview', async ({ page }) => {
   const target = { id: 'target-course', title: 'Новый курс', description: '', mode: 'free', status: 'draft', row_version: 4,
     updated_at: '2026-11-25T12:00:00Z', sections: [{ id: 'target-section', title: 'Раздел', position: 0, items: [] }] }
@@ -71,6 +107,50 @@ test('editor copies an article from another course after preview', async ({ page
   await dialog.getByRole('button', { name: 'Создать копию' }).click()
   await expect(dialog).toHaveCount(0)
   expect(copiedItemId).toBe('source-item')
+})
+
+test('editor previews sequential course without creating learner records', async ({ page }) => {
+  const course = { id: 'course-preview', title: 'Вводный курс', description: '', mode: 'sequential',
+    status: 'draft', row_version: 2, updated_at: '2026-11-25T12:00:00Z', sections: [
+      { id: 'section-1', title: 'Введение', position: 0, items: [
+        { id: 'item-article', kind: 'article', article_id: 'article-1', test_id: null, title: 'Правила', position: 0, required: true },
+        { id: 'item-test', kind: 'test', article_id: null, test_id: 'test-1', title: 'Проверка', position: 1, required: true },
+      ] },
+    ] }
+  const mutations: string[] = []
+  await page.route('**/education-next/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (route.request().method() !== 'GET') mutations.push(path)
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'editor', name: 'Редактор', role: 'editor' } })
+    if (path.endsWith('/my/assignments') || path.endsWith('/admin/campaigns')) return route.fulfill({ json: [] })
+    if (path.endsWith('/admin/courses')) return route.fulfill({ json: [course] })
+    if (path.endsWith('/admin/courses/course-preview')) return route.fulfill({ json: course })
+    if (path.endsWith('/admin/courses/course-preview/articles/article-1')) return route.fulfill({ json: {
+      id: 'article-1', title: 'Правила', summary: '', row_version: 1,
+      body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Изучите правила.' }] }] },
+    } })
+    if (path.endsWith('/admin/tests/test-1')) return route.fulfill({ json: {
+      id: 'test-1', title: 'Проверка', summary: '', time_limit_minutes: 15, max_attempts: 2, min_correct: 1,
+      questions: [{ id: 'question-1', kind: 'single', prompt: 'Что сделать сначала?', options: [
+        { id: 'option-1', text: 'Прочитать правила' }, { id: 'option-2', text: 'Пропустить' },
+      ] }],
+    } })
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('row', { name: /Вводный курс/ }).click()
+  await page.getByRole('button', { name: 'Предпросмотр курса' }).click()
+  const testButton = page.getByRole('button', { name: /Тест Проверка/ })
+  await expect(testButton).toBeDisabled()
+  await page.getByRole('button', { name: /Статья Правила/ }).click()
+  await expect(page.getByText('Изучите правила.')).toBeVisible()
+  await page.getByRole('button', { name: 'Смоделировать завершение' }).click()
+  await expect(testButton).toBeEnabled()
+  await testButton.click()
+  await expect(page.getByText('Что сделать сначала?')).toBeVisible()
+  await page.getByRole('button', { name: 'Смоделировать завершение' }).click()
+  expect(mutations).toEqual([])
 })
 
 test('editor previews questions before copying a test from another course', async ({ page }) => {
@@ -195,6 +275,70 @@ test('knowledge article renders a live Google document inside the app', async ({
   await expect(page.locator('.google-embed')).toContainText('Исходный регламент')
 })
 
+test('editor reads and searches a saved knowledge revision', async ({ page }) => {
+  await page.route('**/education-next/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'editor', name: 'Редактор', role: 'editor' } })
+    if (path.endsWith('/admin/knowledge')) return route.fulfill({ json: { folders: [], articles: [
+      { id: 'article-1', title: 'Регламент', summary: '', row_version: 2 },
+    ] } })
+    if (path.endsWith('/admin/knowledge/articles/article-1/revisions')) return route.fulfill({ json: [
+      { id: 'rev-1', number: 1, date: '2026-11-26', description: 'Первая редакция', published_at: '2026-11-26T00:00:00Z', completion_mode: 'acknowledge', test_id: null },
+    ] })
+    if (path.endsWith('/knowledge/revisions/rev-1')) return route.fulfill({ json: {
+      id: 'rev-1', article_id: 'article-1', number: 1, date: '2026-11-26', description: 'Первая редакция',
+      body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Исторический текст' }] },
+        { type: 'google_document', attrs: { fileId: 'doc123456', snapshot: {
+          text: 'Сохранённый Google текст', fetched_at: '2026-11-26T00:00:00Z', revision_id: 'g-1',
+        } } }] },
+    } })
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('button', { name: 'Управление редакциями' }).click()
+  await page.getByRole('button', { name: 'Регламент' }).click()
+  await page.getByRole('button', { name: 'Просмотреть редакцию' }).click()
+  await expect(page.getByText('Исторический текст')).toBeVisible()
+  await expect(page.getByText('Сохранённый Google текст')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Поиск в сохранённой редакции' }).fill('Google текст')
+  await expect(page.getByRole('status')).toHaveText('Найдено в редакции')
+})
+
+test('administrator withdraws a revision while keeping its history visible', async ({ page }) => {
+  let withdrawn = false
+  await page.route('**/education-next/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'admin', name: 'Администратор', role: 'admin' } })
+    if (path.endsWith('/admin/knowledge')) return route.fulfill({ json: { folders: [], articles: [
+      { id: 'article-1', title: 'Регламент', summary: '', row_version: 2 },
+    ] } })
+    if (path.endsWith('/admin/knowledge/articles/article-1/revisions/rev-1/withdraw')) {
+      const payload = route.request().postDataJSON() as { reason: string; confirmed: boolean }
+      expect(payload).toEqual({ reason: 'Опубликована ошибочно', confirmed: true })
+      withdrawn = true
+      return route.fulfill({ json: { id: 'rev-1', deleted_at: '2026-11-26T12:00:00Z', delete_reason: payload.reason } })
+    }
+    if (path.endsWith('/admin/knowledge/articles/article-1/revisions')) return route.fulfill({ json: [
+      { id: 'rev-1', number: 1, date: '2026-11-26', description: 'Первая редакция',
+        published_at: '2026-11-26T00:00:00Z', completion_mode: 'acknowledge', test_id: null },
+    ] })
+    return route.fulfill({ json: [] })
+  })
+  page.on('dialog', async dialog => {
+    if (dialog.type() === 'prompt') await dialog.accept('Опубликована ошибочно')
+    else await dialog.accept()
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('button', { name: 'Управление редакциями' }).click()
+  await page.getByRole('button', { name: 'Регламент' }).click()
+  await page.getByRole('button', { name: 'Удалить редакцию' }).click()
+  await expect(page.getByText('Удалена · Опубликована ошибочно')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Назначить обновление' })).toHaveCount(0)
+  expect(withdrawn).toBe(true)
+})
+
 test('editor embeds a RUTUBE video inside a knowledge article', async ({ page }) => {
   const article = { id: 'article-1', folder_id: 'folder-1', title: 'Видеоинструкция', summary: '',
     body: { type: 'doc', content: [{ type: 'paragraph' }] }, row_version: 1, updated_at: '2026-11-25T12:00:00Z' }
@@ -286,6 +430,27 @@ test('learner opens assigned course and confirms its article', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Статья Правила Завершено' })).toBeVisible()
 })
 
+test('revision test start button remains readable inside a panel', async ({ page }) => {
+  await page.route('**/education-next/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'learner', name: 'Ученик', role: 'employee' } })
+    if (path.endsWith('/my/assignments')) return route.fulfill({ json: [{ id: 'revision-1', title: 'Обновление', target_type: 'article_revision', status: 'in_progress', due_at: null, is_overdue: false }] })
+    if (path.endsWith('/my/assignments/revision-1')) return route.fulfill({ json: {
+      id: 'revision-1', title: 'Обновление', status: 'in_progress', target_type: 'article_revision', due_at: null,
+      revision: { id: 'rev-1', article_title: 'Статья', number: 1, date: '2026-11-26', description: 'Проверка',
+        body: { type: 'doc', content: [{ type: 'paragraph' }] }, acknowledged: true, test_id: 'test-1' },
+    } })
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Обновления' }).click()
+  await page.getByRole('row', { name: /Обновление/ }).click()
+  const start = page.getByRole('button', { name: 'Начать тест' })
+  await expect(start).toBeVisible()
+  await expect(start).toHaveCSS('color', 'rgb(255, 255, 255)')
+  await expect(start).toHaveCSS('background-color', 'rgb(43, 39, 35)')
+})
+
 test('teacher prepares and confirms a course campaign', async ({ page }) => {
   const course = { id: 'course-1', title: 'Вводный курс', description: '', mode: 'free', status: 'active', row_version: 3,
     updated_at: '2026-11-25T12:00:00Z', sections: [] }
@@ -294,6 +459,7 @@ test('teacher prepares and confirms a course campaign', async ({ page }) => {
   await page.route('**/education-next/api/**', async route => {
     const path = new URL(route.request().url()).pathname
     if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'teacher', name: 'Преподаватель', role: 'teacher' } })
+    if (path.endsWith('/my/assignments')) return route.fulfill({ json: [] })
     if (path.endsWith('/admin/courses')) return route.fulfill({ json: [course] })
     if (path.endsWith('/admin/courses/course-1')) return route.fulfill({ json: course })
     if (path.endsWith('/admin/employees/recipients')) return route.fulfill({ json: [{ bitrix_id: 73, name: 'Ученик', can_review: false }] })
@@ -334,6 +500,42 @@ test('teacher prepares and confirms a course campaign', async ({ page }) => {
   await page.getByRole('row', { name: /Вводный курс Активна 1 Открыть/ }).getByRole('button', { name: 'Открыть' }).click()
   await page.getByRole('button', { name: 'Показать назначения' }).click()
   await expect(page.getByRole('cell', { name: 'Ученик' })).toBeVisible()
+})
+
+test('teacher enables new employee intake on an active department campaign', async ({ page }) => {
+  const course = { id: 'course-1', title: 'Вводный курс', description: '', mode: 'free', status: 'active', row_version: 3,
+    updated_at: '2026-11-25T12:00:00Z', sections: [] }
+  let enabled = false
+  let changePayload: Record<string, unknown> | undefined
+  await page.route('**/education-next/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'teacher', name: 'Преподаватель', role: 'teacher' } })
+    if (path.endsWith('/my/assignments')) return route.fulfill({ json: [] })
+    if (path.endsWith('/admin/courses')) return route.fulfill({ json: [course] })
+    if (path.endsWith('/admin/courses/course-1')) return route.fulfill({ json: course })
+    if (path.endsWith('/admin/campaigns') && route.request().method() === 'GET') return route.fulfill({ json: [
+      { id: 'campaign-1', target_id: 'course-1', title: 'Вводный курс', status: 'active', recipient_count: 1,
+        include_new_employees: enabled, has_department_rule: true },
+    ] })
+    if (path.endsWith('/admin/campaigns/campaign-1/new-employees')) {
+      changePayload = route.request().postDataJSON()
+      enabled = Boolean(changePayload?.enabled)
+      return route.fulfill({ json: { id: 'campaign-1', title: 'Вводный курс', status: 'active', recipient_count: 1,
+        include_new_employees: enabled, has_department_rule: true } })
+    }
+    if (path.endsWith('/admin/employees/recipients') || path.endsWith('/admin/employees/departments')) return route.fulfill({ json: [] })
+    return route.fulfill({ json: { jobs: [], counts: {} } })
+  })
+  page.on('dialog', dialog => dialog.accept('Новые сотрудники этого отдела'))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('row', { name: /Вводный курс/ }).click()
+  await page.getByRole('row', { name: /Вводный курс Активна 1 Открыть/ }).getByRole('button', { name: 'Открыть' }).click()
+  await expect(page.getByText('Сейчас автоматическое назначение выключено.')).toBeVisible()
+  await page.getByRole('button', { name: 'Включить назначения новым сотрудникам' }).click()
+  await expect(page.getByText('Сейчас автоматическое назначение включено.')).toBeVisible()
+  expect(changePayload?.enabled).toBe(true)
+  expect(changePayload?.confirmed).toBe(true)
 })
 
 test('editor creates a test and saves a question', async ({ page }) => {
@@ -384,6 +586,11 @@ test('teacher reviews a free answer in the review center', async ({ page }) => {
     const method = route.request().method()
     if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'teacher', name: 'Преподаватель', role: 'teacher' } })
     if (path.endsWith('/admin/courses')) return route.fulfill({ json: [] })
+    if (path.endsWith('/admin/review-center/overview')) return route.fulfill({ json: {
+      summary: { employees: 0, assignments: 0, completed: 0, not_started: 0, in_progress: 0,
+        pending_review: 0, returned: 0, exempted: 0, overdue: 0 },
+      rows: [], total: 0, offset: 0, limit: 30,
+    } })
     if (path.endsWith('/admin/reviews') && method === 'GET') return route.fulfill({ json: [{ id: 'review-1', status, learner_name: 'Иван Иванов', campaign_title: 'Вводный курс', test_title: 'Проверка', created_at: '2026-11-25T12:00:00Z' }] })
     if (path.endsWith('/admin/reviews/review-1/claim')) { status = 'claimed'; version++; return route.fulfill({ json: detail() }) }
     if (path.endsWith('/admin/reviews/review-1/draft')) { draft = route.request().postDataJSON().decisions; version++; return route.fulfill({ json: detail() }) }
@@ -409,7 +616,179 @@ test('teacher reviews a free answer in the review center', async ({ page }) => {
   await page.getByRole('button', { name: 'Принять' }).click()
   await page.getByRole('button', { name: 'Сохранить решения' }).click()
   await page.getByRole('button', { name: 'Завершить проверку' }).click()
-  await expect(page.getByText('Проверка завершена.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Проверка завершена' })).toBeVisible()
+})
+
+test('review center separates active material campaigns and employee view without export', async ({ page }) => {
+  const summary = { employees: 2, assignments: 3, completed: 1, not_started: 1,
+    in_progress: 1, pending_review: 0, returned: 0, exempted: 0, overdue: 1 }
+  let dueChanged = false
+  await page.route('**/education-next/api/**', async route => {
+    const url = new URL(route.request().url())
+    const path = url.pathname
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'teacher', name: 'Преподаватель', role: 'teacher' } })
+    if (path.endsWith('/admin/employees/departments')) return route.fulfill({ json: [{ id: 17, parent_id: null, title: 'Отдел обучения' }] })
+    if (path.endsWith('/admin/reviews')) return route.fulfill({ json: [] })
+    if (path.endsWith('/admin/review-center/overview')) {
+      const employees = url.searchParams.get('group') === 'employees'
+      return route.fulfill({ json: { summary, total: employees ? 2 : 1, offset: 0, limit: 30,
+        rows: employees ? [
+          { employee_id: 'person-1', bitrix_id: 36, first_name: 'Андрей', last_name: 'Абрамов',
+            department_ids: [17], assignments: 2, completed: 1, not_started: 0, in_progress: 1,
+            pending_review: 0, returned: 0, exempted: 0, overdue: 0, completion_percent: 50 },
+          { employee_id: 'person-2', bitrix_id: 73, first_name: 'Иван', last_name: 'Иванов',
+            department_ids: [17], assignments: 1, completed: 0, not_started: 1, in_progress: 0,
+            pending_review: 0, returned: 0, exempted: 0, overdue: 1, completion_percent: 0 },
+        ] : [
+          { target_type: 'article_revision', target_id: 'revision-1', target_title: 'Этический кодекс',
+            revision_number: 1, revision_date: '2026-11-25', campaign_count: 2,
+            assignments: 3, completed: 1, not_started: 1, in_progress: 1, pending_review: 0,
+            returned: 0, exempted: 0, overdue: 1, completion_percent: 33,
+            campaigns: [
+              { campaign_id: 'campaign-1', campaign_title: 'Этический кодекс',
+                launched_at: '2026-11-25T10:00:00Z', campaign_due_at: null,
+                assignments: 2, completed: 1, not_started: 1, in_progress: 0, pending_review: 0,
+                returned: 0, exempted: 0, overdue: 1, completion_percent: 50 },
+              { campaign_id: 'campaign-2', campaign_title: 'Повторное ознакомление',
+                launched_at: '2026-11-26T10:00:00Z', campaign_due_at: null,
+                assignments: 1, completed: 0, not_started: 0, in_progress: 1, pending_review: 0,
+                returned: 0, exempted: 0, overdue: 0, completion_percent: 0 },
+            ] },
+        ] } })
+    }
+    if (path.endsWith('/admin/assignments/assignment-2/due') && route.request().method() === 'PUT') {
+      const payload = route.request().postDataJSON() as { reason: string; confirmed: boolean }
+      expect(payload.reason).toBe('Продлить после согласования')
+      expect(payload.confirmed).toBe(true)
+      dueChanged = true
+      return route.fulfill({ json: { id: 'assignment-2', status: 'not_started', due_at: '2026-12-02T10:00:00Z' } })
+    }
+    if (path.endsWith('/admin/review-center/assignments/assignment-2')) return route.fulfill({ json: {
+      id: 'assignment-2', employee_name: 'Иван Иванов', bitrix_id: 73,
+      campaign_title: 'Этический кодекс', target_title: 'Этический кодекс', target_type: 'article_revision',
+      status: 'not_started', is_overdue: !dueChanged, assigned_at: '2026-11-25T10:00:00Z',
+      due_at: dueChanged ? '2026-12-02T10:00:00Z' : '2026-11-26T10:00:00Z', completed_at: null,
+      revision_number: 1, revision_date: '2026-11-25', required_total: 0, required_done: 0,
+      sections: [], attempts: [], history: dueChanged ? [{ id: 'change-1', action: 'change_due',
+        reason: 'Продлить после согласования', occurred_at: '2026-11-26T11:00:00Z', details: {} }] : [],
+    } })
+    if (path.endsWith('/admin/review-center/assignments')) return route.fulfill({ json: { total: 2, offset: 0, limit: 100, rows: [
+      { id: 'assignment-1', campaign_id: 'campaign-1', campaign_title: 'Этический кодекс',
+        target_type: 'article_revision', employee_id: 'person-1', employee_name: 'Андрей Абрамов',
+        bitrix_id: 36, department_ids: [17], status: 'completed', is_overdue: false,
+        assigned_at: '2026-11-25T10:00:00Z', due_at: null, completed_at: '2026-11-26T10:00:00Z', attempts: [] },
+      { id: 'assignment-2', campaign_id: 'campaign-1', campaign_title: 'Этический кодекс',
+        target_type: 'article_revision', employee_id: 'person-2', employee_name: 'Иван Иванов',
+        bitrix_id: 73, department_ids: [17], status: 'not_started', is_overdue: true,
+        assigned_at: '2026-11-25T10:00:00Z', due_at: '2026-11-26T10:00:00Z', completed_at: null, attempts: [] },
+    ] } })
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('button', { name: 'Центр проверок' }).click()
+  await page.getByRole('button', { name: 'Проверка отдельных материалов' }).click()
+  await expect(page.getByRole('button', { name: 'По документам' })).toBeVisible()
+  await expect(page.getByRole('row', { name: /Этический кодекс/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /Повторное ознакомление/ })).toBeVisible()
+  await expect(page.getByText('Отображено 1 из 1')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Экспорт|CSV|XLSX/ })).toHaveCount(0)
+  await page.screenshot({ path: 'test-results/review-overview.png', fullPage: true })
+  await page.getByRole('row', { name: /Этический кодекс/ }).getByRole('button', { name: 'Открыть' }).click()
+  await expect(page.getByRole('row', { name: /Иван Иванов/ })).toContainText('просрочено')
+  await page.getByRole('row', { name: /Иван Иванов/ }).getByRole('button', { name: 'Карточка' }).click()
+  await expect(page.getByRole('heading', { name: 'Иван Иванов' })).toBeVisible()
+  await expect(page.getByText('Этический кодекс · редакция № 1')).toBeVisible()
+  await page.getByText('Все действия').click()
+  await page.getByRole('button', { name: 'Изменить срок' }).click()
+  await page.getByLabel('Новый срок').fill('2026-12-02T13:00')
+  await page.getByLabel('Причина').fill('Продлить после согласования')
+  page.on('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Подтвердить', exact: true }).click()
+  await expect(page.getByText('Продлить после согласования')).toBeVisible()
+  expect(dueChanged).toBe(true)
+  await page.getByRole('button', { name: 'Назад к назначениям' }).click()
+  await page.getByRole('button', { name: 'Назад к списку' }).click()
+  await page.getByRole('button', { name: 'По сотрудникам' }).click()
+  await expect(page.getByRole('row', { name: /Андрей Абрамов/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /Иван Иванов/ })).toBeVisible()
+})
+
+test('review center ignores a slower response from an earlier search', async ({ page }) => {
+  await page.route('**/education-next/api/**', async route => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/auth/me')) return route.fulfill({ json: { id: 'teacher', name: 'Преподаватель', role: 'teacher' } })
+    if (url.pathname.endsWith('/admin/employees/departments')) return route.fulfill({ json: [] })
+    if (url.pathname.endsWith('/admin/reviews')) return route.fulfill({ json: [] })
+    if (url.pathname.endsWith('/admin/review-center/overview')) {
+      const search = url.searchParams.get('search') || ''
+      if (search === 'старый') await new Promise(resolve => setTimeout(resolve, 800))
+      return route.fulfill({ json: { summary: { employees: 1, assignments: 1, completed: 0,
+        not_started: 1, in_progress: 0, pending_review: 0, returned: 0, exempted: 0,
+        overdue: 0, required_total: 0, required_done: 0, progress_percent: 0 },
+      total: 1, limit: 30, offset: 0, rows: [{ target_title: search || 'Начальный список',
+        target_type: 'article_revision', target_id: 'revision', campaign_count: 1,
+        assignments: 1, completed: 0, not_started: 1, in_progress: 0, pending_review: 0,
+        returned: 0, exempted: 0, overdue: 0, completion_percent: 0,
+        required_total: 0, required_done: 0, progress_percent: 0,
+        campaigns: [{ campaign_id: search || 'initial', campaign_title: search || 'Начальный список',
+          launched_at: null, campaign_due_at: null, assignments: 1, completed: 0,
+          not_started: 1, in_progress: 0, pending_review: 0, returned: 0, exempted: 0,
+          overdue: 0, completion_percent: 0, progress_percent: 0 }] }] } })
+    }
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('button', { name: 'Центр проверок' }).click()
+  await page.getByRole('button', { name: 'Проверка отдельных материалов' }).click()
+  const input = page.getByRole('textbox', { name: 'Поиск по документу или сотруднику' })
+  await input.fill('старый')
+  await page.waitForRequest(request => new URL(request.url()).searchParams.get('search') === 'старый')
+  await input.fill('новый')
+  await expect(page.getByRole('row', { name: /новый/ })).toBeVisible()
+  await page.waitForTimeout(900)
+  await expect(page.getByRole('row', { name: /старый/ })).toHaveCount(0)
+})
+
+test('review center keeps all employees when moving between large pages', async ({ page }) => {
+  const people = Array.from({ length: 35 }, (_, index) => ({
+    employee_id: `employee-${index}`, bitrix_id: 1000 + index,
+    first_name: `Сотрудник${String(index).padStart(2, '0')}`, last_name: 'Тестовый',
+    department_ids: [], assignments: 1, completed: 0, not_started: 1,
+    in_progress: 0, pending_review: 0, returned: 0, exempted: 0, overdue: 0,
+    completion_percent: 0, progress_percent: 0, required_total: 0, required_done: 0,
+  }))
+  await page.route('**/education-next/api/**', async route => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/auth/me')) return route.fulfill({ json: { id: 'teacher', name: 'Преподаватель', role: 'teacher' } })
+    if (url.pathname.endsWith('/admin/employees/departments') || url.pathname.endsWith('/admin/reviews') ||
+        url.pathname.endsWith('/admin/review-center/reviewers')) return route.fulfill({ json: [] })
+    if (url.pathname.endsWith('/admin/review-center/overview')) {
+      const employeeView = url.searchParams.get('group') === 'employees'
+      const offset = Number(url.searchParams.get('offset') || 0)
+      return route.fulfill({ json: { context: 'materials', group: employeeView ? 'employees' : 'targets',
+        summary: { employees: 35, assignments: 35, completed: 0, not_started: 35,
+          in_progress: 0, pending_review: 0, returned: 0, exempted: 0, overdue: 0,
+          required_total: 0, required_done: 0, progress_percent: 0 },
+        rows: employeeView ? people.slice(offset, offset + 30) : [],
+        total: employeeView ? 35 : 0, offset, limit: 30 } })
+    }
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('button', { name: 'Центр проверок' }).click()
+  await page.getByRole('button', { name: 'Проверка отдельных материалов' }).click()
+  await page.getByRole('button', { name: 'По сотрудникам' }).click()
+  await expect(page.getByRole('row', { name: /Сотрудник00/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /Сотрудник30/ })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Далее' }).click()
+  await expect(page.getByRole('row', { name: /Сотрудник30/ })).toBeVisible()
+  await expect(page.getByRole('row', { name: /Сотрудник00/ })).toHaveCount(0)
+  await expect(page.getByText('31–35 из 35')).toBeVisible()
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await expect(page.getByRole('row', { name: /Сотрудник00/ })).toBeVisible()
 })
 
 test('editor reorders course sections with accessible controls', async ({ page }) => {

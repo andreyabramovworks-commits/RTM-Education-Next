@@ -36,6 +36,21 @@ def test_revision_snapshot_keeps_source_and_fails_closed(monkeypatch):
             {"type": "google_spreadsheet", "attrs": {"fileId": "source12345"}}]})
 
 
+def test_document_paragraph_preserves_safe_text_formatting():
+    blocks = google_documents.structural_blocks([{"paragraph": {"elements": [
+        {"textRun": {"content": "Важное ", "textStyle": {"bold": True}}},
+        {"textRun": {"content": "ссылка", "textStyle": {"italic": True,
+            "link": {"url": "https://example.com/page"}}}},
+        {"textRun": {"content": " и текст\n", "textStyle": {
+            "link": {"url": "javascript:alert(1)"}}}},
+    ]}}])
+    assert blocks[0]["text"] == "Важное ссылка и текст"
+    assert blocks[0]["runs"][0]["bold"] is True
+    assert blocks[0]["runs"][1]["italic"] is True
+    assert blocks[0]["runs"][1]["link"] == "https://example.com/page"
+    assert blocks[0]["runs"][2]["link"] == ""
+
+
 def test_reads_all_sheet_tabs_without_truncating(monkeypatch):
     calls = []
 

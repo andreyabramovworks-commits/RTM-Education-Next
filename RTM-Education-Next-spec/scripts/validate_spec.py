@@ -53,7 +53,7 @@ open_ids=set(re.findall(r'^\| (OPEN-\d{3}) \|',open_text,re.M))
 trace_open_ids={r[6].strip() for r in rows if r[3]=='OPEN'}
 for oid in sorted(open_ids-trace_open_ids):errors.append(f'{oid}: no OPEN requirement row')
 for oid in sorted(trace_open_ids-open_ids):errors.append(f'{oid}: trace references missing OPEN question')
-expected_open={'OPEN-034','OPEN-035','OPEN-036','OPEN-037','OPEN-039','OPEN-040','OPEN-042','OPEN-018','OPEN-019','OPEN-020'}
+expected_open={'OPEN-034','OPEN-035','OPEN-036','OPEN-037','OPEN-039','OPEN-040','OPEN-018','OPEN-019','OPEN-020'}
 if open_ids!=expected_open:errors.append(f'Current OPEN set differs: missing={sorted(expected_open-open_ids)}, extra={sorted(open_ids-expected_open)}')
 for rid in ('REQ-131','REQ-188','REQ-189'):
     row=next((r for r in rows if r[0]==rid),None)
@@ -79,7 +79,7 @@ keychecks={
  'docs/REVIEW_CENTER_NEXT.md':['**Ровно три вкладки.**','«Требует действий»','«Проверка отдельных материалов»','«Проверка курсов обучений»','**Не правый drawer.**','«Все действия»'],
  'docs/TEST_REVIEW_WORKFLOWS.md':['**A. «Исправить только свободный ответ»','**B. «Пройти тест заново»','атомарная','Просмотреть ответы и попытки'],
  'AGENTS.md':['**На production запрещено редактировать исходный код.**','**Никаких `commit`, `push`, tag, release без отдельного явного разрешения пользователя','origin/main','docs/CURRENT_MVP_BASELINE.md'],
- 'docs/OPEN_QUESTIONS.md':['OPEN-042'],
+ 'docs/OPEN_QUESTIONS.md':['OPEN-034'],
  'docs/UI_NAVIGATION.md':['«Обучение»','«Курсы»','«Обновления»','«База знаний»','«Профиль»'],
  'docs/DATA_MODEL.md':['`articles`','`materials`','`knowledge_folders`','`knowledge_folder_articles`','`knowledge_access_grants`','`audio_assets`','`google_text_snapshots`'],
  'docs/CONTENT_REVISIONS.md':['Редакция фиксирует текст Tiptap','компактный текстовый снимок','«Полный тест»'],

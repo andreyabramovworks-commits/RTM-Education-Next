@@ -23,6 +23,7 @@ class NewCampaign(BaseModel):
     recipient_bitrix_ids: list[int] = Field(default_factory=list)
     department_ids: list[int] = Field(default_factory=list)
     include_subdepartments: bool = False
+    include_new_employees: bool = False
     reviewer_bitrix_ids: list[int] = Field(default_factory=list)
     due_mode: str = Field(pattern="^(relative|absolute)$")
     due_days: int | None = Field(default=None, ge=1, le=3650)
@@ -36,6 +37,8 @@ class NewCampaign(BaseModel):
     def valid_deadline(self):
         if not self.recipient_bitrix_ids and not self.department_ids:
             raise ValueError("Choose recipients or departments")
+        if self.include_new_employees and not self.department_ids:
+            raise ValueError("New employees require a department rule")
         if self.due_mode == "relative" and self.due_days is None:
             raise ValueError("Relative deadline needs days")
         if self.due_mode == "absolute" and (self.due_at is None or self.due_at.tzinfo is None):
@@ -61,8 +64,16 @@ class ChangeDue(IndividualDecision):
     due_at: datetime
 
 
+class Reminder(IndividualDecision):
+    request_id: uuid.UUID
+
+
 class AddRecipients(IndividualDecision):
     recipient_bitrix_ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class ChangeNewEmployees(IndividualDecision):
+    enabled: bool
 
 
 def audit_assignment(db: Session, assignment: Assignment, actor: Employee,
@@ -110,6 +121,74 @@ def create_assignment(db: Session, campaign: AssignmentCampaign, employee: Emplo
     return assignment
 
 
+def ensure_revision_assignable(db: Session, campaign: AssignmentCampaign) -> None:
+    if campaign.target_type != "article_revision":
+        return
+    revision = db.get(ArticleRevision, campaign.target_id)
+    if revision is None or revision.deleted_at is not None:
+        raise HTTPException(409, "Revision is withdrawn")
+
+
+def sync_new_employee_assignments(db: Session) -> int:
+    """Assign employees first discovered after an active department rule was enabled."""
+    campaigns = db.scalars(select(AssignmentCampaign).where(AssignmentCampaign.status == "active")
+        .order_by(AssignmentCampaign.id).with_for_update()).all()
+    eligible = [campaign for campaign in campaigns
+        if campaign.recipient_policy.get("include_new_employees")
+        and campaign.recipient_policy.get("new_employee_from")
+        and campaign.recipient_policy.get("department_ids")
+        and (campaign.target_type != "article_revision" or
+            (revision := db.get(ArticleRevision, campaign.target_id)) is not None
+            and revision.deleted_at is None)]
+    if not eligible:
+        db.rollback()
+        return 0
+    departments = {row.bitrix_id: row.parent_id for row in db.scalars(select(Department)).all()}
+    now = datetime.now(timezone.utc)
+    total = 0
+    for campaign in eligible:
+        policy = dict(campaign.recipient_policy)
+        cutoff = datetime.fromisoformat(policy["new_employee_from"])
+        selected = set(policy["department_ids"])
+        existing = set(db.scalars(select(Assignment.employee_id).where(
+            Assignment.campaign_id == campaign.id)).all())
+        employees = db.scalars(select(Employee).where(Employee.active.is_(True),
+            Employee.first_seen_at > cutoff, Employee.first_seen_at <= now)).all()
+        added = []
+        for employee in employees:
+            if employee.id in existing:
+                continue
+            matched = []
+            for department_id in employee.department_ids:
+                cursor = department_id
+                visited = set()
+                while cursor and cursor not in visited:
+                    if cursor in selected:
+                        matched.append(department_id)
+                        break
+                    if not policy.get("include_subdepartments"):
+                        break
+                    visited.add(cursor)
+                    cursor = departments.get(cursor)
+            if not matched:
+                continue
+            assignment = create_assignment(db, campaign, employee, now,
+                {"type": "new_employee_department", "bitrix_id": employee.bitrix_id,
+                 "department_ids": sorted(set(matched))})
+            audit_assignment(db, assignment, db.get(Employee, campaign.created_by),
+                "auto_add_recipient", "Новый сотрудник по правилу подразделения кампании",
+                {"campaign_id": str(campaign.id), "first_seen_at": employee.first_seen_at.isoformat(),
+                 "department_ids": sorted(set(matched))})
+            added.append(employee.bitrix_id)
+            existing.add(employee.id)
+        if added:
+            policy["employee_ids"] = sorted(set(policy.get("employee_ids", [])) | set(added))
+            campaign.recipient_policy = policy
+            total += len(added)
+    db.commit()
+    return total
+
+
 def editable_assignment(db: Session, assignment_id: uuid.UUID) -> Assignment:
     assignment = db.scalar(select(Assignment).where(Assignment.id == assignment_id).with_for_update())
     if assignment is None:
@@ -127,6 +206,8 @@ def campaign_data(campaign: AssignmentCampaign, count: int = 0) -> dict:
             "notify_enabled": campaign.notify_enabled, "task_enabled": campaign.task_enabled,
             "task_title": campaign.task_title, "task_description": campaign.task_description,
             "reviewer_ids": campaign.reviewer_ids,
+            "include_new_employees": bool(campaign.recipient_policy.get("include_new_employees")),
+            "has_department_rule": bool(campaign.recipient_policy.get("department_ids")),
             "launched_at": campaign.launched_at.isoformat() if campaign.launched_at else None}
 
 
@@ -185,8 +266,10 @@ def create_campaign(payload: NewCampaign, db: Session = Depends(get_db), actor: 
         test = db.get(TestDefinition, payload.target_id)
         if test is None or test.owner_course_id is None:
             raise HTTPException(404)
-    elif db.get(ArticleRevision, payload.target_id) is None:
-        raise HTTPException(404)
+    else:
+        revision = db.get(ArticleRevision, payload.target_id)
+        if revision is None or revision.deleted_at is not None:
+            raise HTTPException(404)
     departments = {row.bitrix_id: row for row in db.scalars(select(Department)).all()}
     selected_departments = set(payload.department_ids)
     if any(department_id not in departments for department_id in selected_departments):
@@ -231,6 +314,7 @@ def create_campaign(payload: NewCampaign, db: Session = Depends(get_db), actor: 
         title=payload.title.strip(), status="draft", recipient_policy={"employee_ids": recipients,
             "selected_employee_ids": sorted(set(payload.recipient_bitrix_ids)),
             "department_ids": sorted(selected_departments), "include_subdepartments": payload.include_subdepartments,
+            "include_new_employees": payload.include_new_employees,
             "duplicates_excluded": sum(count - 1 for count in occurrences.values() if count > 1),
             "duplicate_bitrix_ids": sorted(bitrix_id for bitrix_id, count in occurrences.items() if count > 1),
             "inactive_excluded_ids": inactive_ids},
@@ -282,6 +366,7 @@ def add_campaign_recipients(campaign_id: uuid.UUID, payload: AddRecipients,
         raise HTTPException(404)
     if campaign.status != "active":
         raise HTTPException(409, "Campaign is not active")
+    ensure_revision_assignable(db, campaign)
     requested = set(payload.recipient_bitrix_ids)
     employees = db.scalars(select(Employee).where(Employee.bitrix_id.in_(requested), Employee.active.is_(True))).all()
     if len(employees) != len(requested):
@@ -304,6 +389,33 @@ def add_campaign_recipients(campaign_id: uuid.UUID, payload: AddRecipients,
     db.commit()
     return {"added_ids": sorted(added), "already_assigned_ids": sorted(requested - set(added)),
             "recipient_count": len(policy["employee_ids"])}
+
+
+@router.put("/admin/campaigns/{campaign_id}/new-employees")
+def change_new_employees(campaign_id: uuid.UUID, payload: ChangeNewEmployees,
+                         db: Session = Depends(get_db), actor: Employee = Depends(require_role("teacher"))):
+    if not payload.confirmed or len(payload.reason.strip()) < 10:
+        raise HTTPException(422, "Confirmed reason is required")
+    campaign = db.scalar(select(AssignmentCampaign).where(AssignmentCampaign.id == campaign_id).with_for_update())
+    if campaign is None:
+        raise HTTPException(404)
+    if campaign.status != "active":
+        raise HTTPException(409, "Campaign is not active")
+    policy = dict(campaign.recipient_policy)
+    if payload.enabled and not policy.get("department_ids"):
+        raise HTTPException(422, "New employees require a department rule")
+    previous = bool(policy.get("include_new_employees"))
+    if previous != payload.enabled:
+        now = datetime.now(timezone.utc)
+        policy["include_new_employees"] = payload.enabled
+        policy["new_employee_from"] = now.isoformat() if payload.enabled else None
+        history = list(policy.get("changes", []))
+        history.append({"action": "new_employee_rule", "enabled": payload.enabled,
+                        "actor_id": str(actor.id), "reason": payload.reason.strip(), "at": now.isoformat()})
+        policy["changes"] = history
+        campaign.recipient_policy = policy
+        db.commit()
+    return campaign_data(campaign, len(policy.get("employee_ids", [])))
 
 
 @router.get("/admin/campaigns/{campaign_id}/delivery")
@@ -361,6 +473,32 @@ def change_assignment_due(assignment_id: uuid.UUID, payload: ChangeDue, db: Sess
     return {"id": str(assignment.id), "due_at": assignment.due_at.isoformat(), "status": assignment.status}
 
 
+@router.post("/admin/assignments/{assignment_id}/remind", status_code=201)
+def remind_assignment(assignment_id: uuid.UUID, payload: Reminder, db: Session = Depends(get_db),
+                      actor: Employee = Depends(require_role("teacher"))):
+    if not payload.confirmed or len(payload.reason.strip()) < 10:
+        raise HTTPException(422, "Confirmed reason is required")
+    assignment = editable_assignment(db, assignment_id)
+    campaign = db.get(AssignmentCampaign, assignment.campaign_id)
+    if campaign is None or campaign.status != "active":
+        raise HTTPException(409, "Campaign is not active")
+    person = db.get(Employee, assignment.employee_id)
+    if person is None or not person.active:
+        raise HTTPException(409, "Employee is not active")
+    key = f"{assignment.id}:remind:{payload.request_id}"
+    existing = db.scalar(select(OutboxJob).where(OutboxJob.idempotency_key == key))
+    if existing:
+        return {"id": str(existing.id), "status": existing.status}
+    job = OutboxJob(kind="bitrix_notification", idempotency_key=key,
+        payload={"assignment_id": str(assignment.id), "bitrix_id": person.bitrix_id,
+                 "message": f"Напоминание об обучении: {campaign.title}. Откройте RTM Обучение Next в Битрикс24."})
+    db.add(job)
+    db.flush()
+    audit_assignment(db, assignment, actor, "remind", payload.reason.strip(), {"job_id": str(job.id)})
+    db.commit()
+    return {"id": str(job.id), "status": job.status}
+
+
 @router.post("/admin/assignments/{assignment_id}/exempt")
 def exempt_assignment(assignment_id: uuid.UUID, payload: IndividualDecision,
                       db: Session = Depends(get_db), actor: Employee = Depends(require_role("teacher"))):
@@ -407,6 +545,7 @@ def launch_campaign(campaign_id: uuid.UUID, payload: Launch, db: Session = Depen
         if course is None or course.status != "active":
             raise HTTPException(409, "Course is not active")
     elif campaign.target_type == "article_revision":
+        ensure_revision_assignable(db, campaign)
         test = db.scalar(select(TestDefinition).where(TestDefinition.article_revision_id == campaign.target_id))
         if test and not db.scalar(select(TestQuestion.id).where(TestQuestion.test_id == test.id).limit(1)):
             raise HTTPException(409, "Revision test has no questions")
@@ -426,6 +565,8 @@ def launch_campaign(campaign_id: uuid.UUID, payload: Launch, db: Session = Depen
              "department_ids": sorted(set(employee.department_ids) & set(campaign.recipient_policy.get("department_ids", [])))})
     campaign.status = "active"
     campaign.launched_at = now
+    if campaign.recipient_policy.get("include_new_employees"):
+        campaign.recipient_policy = {**campaign.recipient_policy, "new_employee_from": now.isoformat()}
     db.commit()
     return campaign_data(campaign, len(recipients))
 

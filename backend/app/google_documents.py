@@ -110,10 +110,24 @@ def structural_blocks(elements: list[dict]) -> list[dict]:
     for element in elements:
         paragraph = element.get("paragraph")
         if paragraph is not None:
-            text = "".join(item.get("textRun", {}).get("content", "") for item in paragraph.get("elements", [])).strip()
+            runs = []
+            for item in paragraph.get("elements", []):
+                run = item.get("textRun", {})
+                content = run.get("content", "")
+                if not content:
+                    continue
+                style = run.get("textStyle", {})
+                link = style.get("link", {}).get("url", "")
+                runs.append({"text": content, "bold": bool(style.get("bold")),
+                             "italic": bool(style.get("italic")), "underline": bool(style.get("underline")),
+                             "link": link if isinstance(link, str) and link.startswith("https://") else ""})
+            text = "".join(run["text"] for run in runs).strip()
             if text:
-                result.append({"type": "paragraph", "style": paragraph.get("paragraphStyle", {}).get(
-                    "namedStyleType", "NORMAL_TEXT"), "text": text})
+                block = {"type": "paragraph", "style": paragraph.get("paragraphStyle", {}).get(
+                    "namedStyleType", "NORMAL_TEXT"), "text": text}
+                if any(run["bold"] or run["italic"] or run["underline"] or run["link"] for run in runs):
+                    block["runs"] = runs
+                result.append(block)
         table = element.get("table")
         if table is not None:
             rows = [[content_text(cell.get("content", [])) for cell in row.get("tableCells", [])]

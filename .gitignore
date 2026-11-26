@@ -9,6 +9,7 @@ app/dist/
 RTM-Education-Next-spec/.playwright-cli/
 backend/.venv/
 private/
+docs/DEMO_ACCEPTANCE.md
 rtm-next-test.tar.gz
 app/test-results/
 app/playwright-report/
