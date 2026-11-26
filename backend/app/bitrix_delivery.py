@@ -52,6 +52,8 @@ def refresh_auth(stale_access_token: str) -> dict:
         if not renewed.get("access_token") or not renewed.get("refresh_token"):
             raise DeliveryError("TOKEN_REFRESH_REJECTED")
         auth.update({"access_token": renewed["access_token"], "refresh_token": renewed["refresh_token"]})
+        if isinstance(renewed.get("scope"), str):
+            auth["scope"] = renewed["scope"]
         temporary = AUTH_FILE.with_suffix(".tmp")
         temporary.write_text(json.dumps(auth))
         os.chmod(temporary, 0o600)

@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import fcntl
 import json
 import logging
 import os
@@ -12,7 +13,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.bitrix import PORTAL, call
+from app.bitrix import PORTAL, call, token_scopes
 from app.db import SessionLocal, get_db
 from app.directory import sync_directory, sync_structure
 from app.models import BrowserSession, Employee
@@ -29,6 +30,34 @@ def saved_install() -> dict:
         return json.loads(AUTH_FILE.read_text())
     except (OSError, ValueError) as exc:
         raise HTTPException(503, "Bitrix installation is unavailable") from exc
+
+
+def capture_launch_auth(access_token: str, refresh_token: str, member_id: str,
+                        application_token: str) -> None:
+    """Replace a stale installation token with verified developer launch credentials."""
+    try:
+        info = call("app.info", access_token)
+        scopes = token_scopes(access_token)
+        if info.get("CODE") != CLIENT_ID or "im" not in scopes:
+            return
+        lock_path = AUTH_FILE.with_suffix(".lock")
+        with lock_path.open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            current = saved_install()
+            if (not hmac.compare_digest(str(current.get("member_id", "")), member_id)
+                    or not hmac.compare_digest(str(current.get("application_token", "")), application_token)):
+                return
+            existing_scopes = set(str(current.get("scope", "")).split(",")) - {""}
+            if "im" in existing_scopes or not existing_scopes.issubset(set(scopes)):
+                return
+            renewed = {**current, "access_token": access_token, "refresh_token": refresh_token,
+                       "scope": ",".join(scopes)}
+            temporary = AUTH_FILE.with_suffix(".tmp")
+            temporary.write_text(json.dumps(renewed))
+            os.chmod(temporary, 0o600)
+            temporary.replace(AUTH_FILE)
+    except (OSError, ValueError, HTTPException) as exc:
+        logger.warning("Bitrix launch token capture failed: %s", type(exc).__name__)
 
 
 @router.post("/install")
@@ -103,12 +132,15 @@ def open_app(
     request: Request,
     background_tasks: BackgroundTasks,
     auth_id: str = Form(alias="AUTH_ID"),
+    refresh_id: str | None = Form(default=None, alias="REFRESH_ID"),
     application_token: str = Form(alias="APPLICATION_TOKEN"),
     member_id: str = Form(alias="member_id"),
     db: Session = Depends(get_db),
 ):
     redirect = RedirectResponse("/education-next/", status_code=303)
     profile = launch(redirect, request, auth_id, application_token, member_id, db)
+    if profile["role"] == "developer" and refresh_id:
+        background_tasks.add_task(capture_launch_auth, auth_id, refresh_id, member_id, application_token)
     if profile["role"] in ("admin", "developer"):
         background_tasks.add_task(sync_directory_job, auth_id)
     return redirect

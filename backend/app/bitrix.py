@@ -20,6 +20,21 @@ def call(method: str, token: str) -> dict:
     return payload["result"]
 
 
+def token_scopes(token: str) -> list[str]:
+    """Read the permissions granted to this exact Bitrix application token."""
+    request = Request(
+        f"https://{PORTAL}/rest/scope.json",
+        data=urlencode({"auth": token}).encode(),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    with urlopen(request, timeout=8) as response:
+        payload = json.load(response)
+    result = payload.get("result")
+    if not isinstance(result, list) or not all(isinstance(scope, str) for scope in result):
+        raise ValueError("Bitrix scope response is unavailable")
+    return result
+
+
 def list_users(token: str) -> list[dict]:
     """Read the employee directory with Bitrix24's documented 50-row pagination."""
     users: list[dict] = []

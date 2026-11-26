@@ -73,6 +73,44 @@ test('editor copies an article from another course after preview', async ({ page
   expect(copiedItemId).toBe('source-item')
 })
 
+test('editor previews questions before copying a test from another course', async ({ page }) => {
+  const target = { id: 'target-course', title: 'Новый курс', description: '', mode: 'free', status: 'draft', row_version: 4,
+    updated_at: '2026-11-25T12:00:00Z', sections: [{ id: 'target-section', title: 'Раздел', position: 0, items: [] }] }
+  const source = { id: 'source-course', title: 'Исходный курс', description: '', mode: 'active', status: 'active', row_version: 2,
+    updated_at: '2026-11-25T12:00:00Z', sections: [{ id: 'source-section', title: 'Введение', position: 0,
+      items: [{ id: 'source-test-item', kind: 'test', article_id: null, test_id: 'source-test', title: 'Проверка знаний', position: 0, required: true }] }] }
+  let copiedItemId = ''
+  await page.route('**/education-next/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'editor', name: 'Редактор', role: 'editor' } })
+    if (path.endsWith('/admin/courses')) return route.fulfill({ json: [target, source] })
+    if (path.endsWith('/admin/courses/target-course')) return route.fulfill({ json: target })
+    if (path.endsWith('/admin/courses/source-course')) return route.fulfill({ json: source })
+    if (path.endsWith('/admin/tests/source-test')) return route.fulfill({ json: {
+      id: 'source-test', title: 'Проверка знаний', summary: 'После вводного раздела',
+      questions: [{ kind: 'single', prompt: 'Как действовать при ошибке?' },
+        { kind: 'free_text', prompt: 'Опишите порядок проверки.' }],
+    } })
+    if (path.endsWith('/admin/courses/target-course/sections/target-section/copy-item')) {
+      copiedItemId = route.request().postDataJSON().source_item_id
+      return route.fulfill({ status: 201, json: { id: 'new-item', test_id: 'new-test', row_version: 5 } })
+    }
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('row', { name: /Новый курс/ }).click()
+  await page.getByRole('button', { name: 'Копировать из другого курса' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Копировать из другого курса' })
+  await dialog.getByRole('button', { name: 'Исходный курс' }).click()
+  await dialog.getByRole('button', { name: /Проверка знаний/ }).click()
+  await expect(dialog.getByText('Как действовать при ошибке?')).toBeVisible()
+  await expect(dialog.getByText('Опишите порядок проверки.')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Создать копию' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(copiedItemId).toBe('source-test-item')
+})
+
 test('editor saves a knowledge article with structured text', async ({ page }) => {
   page.on('pageerror', error => console.error('Browser error:', error.message))
   let savedBody: unknown

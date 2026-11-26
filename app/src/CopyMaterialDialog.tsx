@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 type CourseSummary = { id: string; title: string; description: string }
 type CourseItem = { id: string; kind: 'article' | 'test'; article_id: string | null; test_id: string | null; title: string }
 type SourceCourse = CourseSummary & { sections: { id: string; title: string; items: CourseItem[] }[] }
-type MaterialPreview = { title: string; summary?: string; body?: unknown; questions?: unknown[] }
+type MaterialPreview = { title: string; summary?: string; body?: unknown;
+  questions?: { kind: 'single' | 'multiple' | 'free_text'; prompt: string }[] }
 
 type Props = {
   targetCourseId: string
@@ -94,7 +95,7 @@ export default function CopyMaterialDialog({ targetCourseId, targetSectionId, ta
         <div><h3>Материалы</h3><div className="copy-dialog-list">{sourceCourse?.sections.flatMap(section => section.items.map(item => <button type="button" className={sourceItem?.id === item.id ? 'chosen' : ''} key={item.id} onClick={() => void selectItem(item)} disabled={copying}><small>{section.title} · {item.kind === 'article' ? 'Статья' : 'Тест'}</small>{item.title}</button>))}{!sourceCourse && <p>Сначала выберите курс.</p>}{sourceCourse && !sourceCourse.sections.some(section => section.items.length) && <p>В этом курсе нет материалов.</p>}</div></div>
       </div>
       {loading && <p role="status">Загружаем…</p>}
-      {preview && <section className="copy-dialog-preview"><small>Предпросмотр источника</small><h3>{preview.title}</h3>{preview.summary && <p>{preview.summary}</p>}{sourceItem?.kind === 'article' && <p>{articleText(preview.body).slice(0, 700) || 'В статье пока нет собственного текста.'}</p>}{sourceItem?.kind === 'test' && <p>Вопросов: {preview.questions?.length ?? 0}</p>}</section>}
+      {preview && <section className="copy-dialog-preview"><small>Предпросмотр источника</small><h3>{preview.title}</h3>{preview.summary && <p>{preview.summary}</p>}{sourceItem?.kind === 'article' && <p>{articleText(preview.body).slice(0, 700) || 'В статье пока нет собственного текста.'}</p>}{sourceItem?.kind === 'test' && <><p>Вопросов: {preview.questions?.length ?? 0}</p><ol>{preview.questions?.map((question, index) => <li key={index}><span>{question.kind === 'free_text' ? 'Свободный ответ' : question.kind === 'multiple' ? 'Несколько вариантов' : 'Один вариант'}</span><p>{question.prompt}</p></li>)}</ol></>}</section>}
       {error && <p role="alert" className="error">{error}</p>}
       <div className="copy-dialog-actions"><button type="button" onClick={onClose} disabled={copying}>Отмена</button><button type="button" className="primary" onClick={() => void copy()} disabled={!sourceItem || !preview || loading || copying}>{copying ? 'Создаём копию…' : 'Создать копию'}</button></div>
     </div>
