@@ -1,4 +1,5 @@
 import uuid
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -145,9 +146,27 @@ def campaign_preview(campaign_id: uuid.UUID, db: Session = Depends(get_db),
               if campaign.due_mode == "relative" else campaign.due_at)
     name = f"{example.first_name} {example.last_name}".strip() if example else ""
     target_title = campaign_target_title(db, campaign)
+    inactive_ids = campaign.recipient_policy.get("inactive_excluded_ids", [])
+    inactive_rows = db.scalars(select(Employee).where(Employee.bitrix_id.in_(inactive_ids))).all() if inactive_ids else []
+    inactive_names = {row.bitrix_id: f"{row.first_name} {row.last_name}".strip() for row in inactive_rows}
+    selected_directly = set(campaign.recipient_policy.get("selected_employee_ids", []))
+    recipient_preview = []
+    for employee in recipients:
+        employee_name = f"{employee.first_name} {employee.last_name}".strip()
+        recipient_preview.append({"bitrix_id": employee.bitrix_id, "name": employee_name,
+            "source": "individual" if employee.bitrix_id in selected_directly else "department",
+            "due_at": due_at.isoformat() if due_at else None,
+            "task_title": render_task(campaign.task_title, target_title, employee_name, due_at) if campaign.task_enabled else None,
+            "task_description": render_task(campaign.task_description, target_title, employee_name, due_at) if campaign.task_enabled else None})
     return {"recipient_count": len(recipients), "example_recipient": name,
             "due_at": due_at.isoformat() if due_at else None,
             "relative_due_is_estimate": campaign.due_mode == "relative",
+            "duplicates_excluded": campaign.recipient_policy.get("duplicates_excluded", 0),
+            "duplicate_recipients": [row["name"] for row in recipient_preview if row["bitrix_id"] in
+                campaign.recipient_policy.get("duplicate_bitrix_ids", [])],
+            "inactive_excluded": [{"bitrix_id": bitrix_id, "name": inactive_names.get(bitrix_id, f"#{bitrix_id}")}
+                for bitrix_id in inactive_ids],
+            "recipients": recipient_preview,
             "task_title": render_task(campaign.task_title, target_title, name, due_at) if campaign.task_enabled else None,
             "task_description": render_task(campaign.task_description, target_title, name, due_at) if campaign.task_enabled else None}
 
@@ -184,9 +203,19 @@ def create_campaign(payload: NewCampaign, db: Session = Depends(get_db), actor: 
                 visited.add(cursor)
                 parent = departments.get(cursor)
                 cursor = parent.parent_id if parent else None
-    department_recipients = db.scalars(select(Employee).where(Employee.active.is_(True))).all() if included_departments else []
-    recipients = sorted(set(payload.recipient_bitrix_ids) |
-        {person.bitrix_id for person in department_recipients if included_departments.intersection(person.department_ids)})
+    department_members = db.scalars(select(Employee)).all() if included_departments else []
+    department_recipients = [person for person in department_members if person.active]
+    inactive_ids = sorted(person.bitrix_id for person in department_members if not person.active
+        and included_departments.intersection(person.department_ids))
+    direct_recipients = set(payload.recipient_bitrix_ids)
+    department_ids = {person.bitrix_id for person in department_recipients
+        if included_departments.intersection(person.department_ids)}
+    recipients = sorted(direct_recipients | department_ids)
+    occurrences = Counter(payload.recipient_bitrix_ids)
+    for person in department_recipients:
+        selected_memberships = included_departments.intersection(person.department_ids)
+        if selected_memberships:
+            occurrences[person.bitrix_id] += len(selected_memberships)
     if not recipients:
         raise HTTPException(422, "No active recipients")
     rows = db.scalars(select(Employee).where(Employee.bitrix_id.in_(recipients), Employee.active.is_(True))).all()
@@ -201,7 +230,10 @@ def create_campaign(payload: NewCampaign, db: Session = Depends(get_db), actor: 
     campaign = AssignmentCampaign(target_type=payload.target_type, target_id=payload.target_id,
         title=payload.title.strip(), status="draft", recipient_policy={"employee_ids": recipients,
             "selected_employee_ids": sorted(set(payload.recipient_bitrix_ids)),
-            "department_ids": sorted(selected_departments), "include_subdepartments": payload.include_subdepartments},
+            "department_ids": sorted(selected_departments), "include_subdepartments": payload.include_subdepartments,
+            "duplicates_excluded": sum(count - 1 for count in occurrences.values() if count > 1),
+            "duplicate_bitrix_ids": sorted(bitrix_id for bitrix_id, count in occurrences.items() if count > 1),
+            "inactive_excluded_ids": inactive_ids},
         reviewer_ids=reviewers, due_mode=payload.due_mode, due_days=payload.due_days if payload.due_mode == "relative" else None,
         due_at=payload.due_at if payload.due_mode == "absolute" else None,
         notify_enabled=payload.notify_enabled, task_enabled=payload.task_enabled,

@@ -37,6 +37,42 @@ test('ordinary employee has no admin entry', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Админка' })).toHaveCount(0)
 })
 
+test('editor copies an article from another course after preview', async ({ page }) => {
+  const target = { id: 'target-course', title: 'Новый курс', description: '', mode: 'free', status: 'draft', row_version: 4,
+    updated_at: '2026-11-25T12:00:00Z', sections: [{ id: 'target-section', title: 'Раздел', position: 0, items: [] }] }
+  const source = { id: 'source-course', title: 'Исходный курс', description: '', mode: 'active', status: 'active', row_version: 2,
+    updated_at: '2026-11-25T12:00:00Z', sections: [{ id: 'source-section', title: 'Введение', position: 0,
+      items: [{ id: 'source-item', kind: 'article', article_id: 'source-article', test_id: null, title: 'Правила', position: 0, required: true }] }] }
+  let copiedItemId = ''
+  await page.route('**/education-next/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/me')) return route.fulfill({ json: { id: 'editor', name: 'Редактор', role: 'editor' } })
+    if (path.endsWith('/admin/courses')) return route.fulfill({ json: [target, source] })
+    if (path.endsWith('/admin/courses/target-course')) return route.fulfill({ json: target })
+    if (path.endsWith('/admin/courses/source-course')) return route.fulfill({ json: source })
+    if (path.endsWith('/admin/courses/source-course/articles/source-article')) return route.fulfill({ json: {
+      id: 'source-article', title: 'Правила', summary: 'Описание правил', body: { type: 'doc', content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Текст исходной статьи' }] }] },
+    } })
+    if (path.endsWith('/admin/courses/target-course/sections/target-section/copy-item')) {
+      copiedItemId = route.request().postDataJSON().source_item_id
+      return route.fulfill({ status: 201, json: { id: 'new-item', article_id: 'new-article', row_version: 5 } })
+    }
+    return route.fulfill({ json: [] })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Админка' }).click()
+  await page.getByRole('row', { name: /Новый курс/ }).click()
+  await page.getByRole('button', { name: 'Копировать из другого курса' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Копировать из другого курса' })
+  await dialog.getByRole('button', { name: 'Исходный курс' }).click()
+  await dialog.getByRole('button', { name: /Правила/ }).click()
+  await expect(dialog.getByText('Текст исходной статьи')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Создать копию' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(copiedItemId).toBe('source-item')
+})
+
 test('editor saves a knowledge article with structured text', async ({ page }) => {
   page.on('pageerror', error => console.error('Browser error:', error.message))
   let savedBody: unknown
@@ -232,6 +268,9 @@ test('teacher prepares and confirms a course campaign', async ({ page }) => {
       recipient_count: 1, example_recipient: 'Ученик', due_at: '2026-12-02T12:00:00Z',
       relative_due_is_estimate: true, task_title: 'Пройти курс «Вводный курс» — Ученик',
       task_description: 'Откройте приложение и пройдите курс до 02.12.2026.',
+      duplicates_excluded: 0, duplicate_recipients: [], inactive_excluded: [], recipients: [{ bitrix_id: 73, name: 'Ученик', source: 'individual',
+        due_at: '2026-12-02T12:00:00Z', task_title: 'Пройти курс «Вводный курс» — Ученик',
+        task_description: 'Откройте приложение и пройдите курс до 02.12.2026.' }],
     } })
     if (path.endsWith('/admin/campaigns/campaign-1/launch')) { launched = true; return route.fulfill({ json: { id: 'campaign-1', title: 'Вводный курс', status: 'active', recipient_count: 1 } }) }
     if (path.endsWith('/admin/campaigns/campaign-1/assignments')) return route.fulfill({ json: [{ id: 'assignment-1', employee_name: 'Ученик', employee_bitrix_id: 73, status: 'not_started', due_at: null, is_overdue: false }] })
@@ -248,7 +287,9 @@ test('teacher prepares and confirms a course campaign', async ({ page }) => {
   await page.getByRole('button', { name: 'Сохранить черновик кампании' }).click()
   await expect.poll(() => draftPayload?.recipient_bitrix_ids).toEqual([73])
   await expect(page.getByRole('heading', { name: 'Предпросмотр задачи для Ученик' })).toBeVisible()
-  await expect(page.getByText('Пройти курс «Вводный курс» — Ученик')).toBeVisible()
+  await expect(page.getByText('Пройти курс «Вводный курс» — Ученик').filter({ visible: true })).toBeVisible()
+  await page.getByText('Все получатели и задачи (1)').click()
+  await expect(page.getByRole('row', { name: /Ученик #73 Личный выбор/ })).toBeVisible()
   await page.getByRole('button', { name: 'Подтвердить запуск' }).click()
   await expect(page.getByRole('heading', { name: 'Кампания запущена' })).toBeVisible()
   await page.getByRole('button', { name: 'Вернуться к курсу' }).click()

@@ -3,7 +3,7 @@
 set -eu
 
 ROOT=/opt/rtm-education-next
-BACKUPS=/opt/rtm-education-next-backups
+BACKUPS=/home/rtmedu/rtm-next-production-backups
 LOCK=/tmp/rtm-education-next-deploy.lock
 
 if [ "$(realpath "$(dirname "$0")/..")" != "$ROOT" ]; then

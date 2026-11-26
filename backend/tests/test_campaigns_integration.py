@@ -30,6 +30,12 @@ def test_course_activation_campaign_launch_and_individual_visibility():
                 expires_at=datetime.now(timezone.utc) + timedelta(hours=1)))
         ids = {role: person.id for role, person in people.items()}
         bitrix_ids = {role: person.bitrix_id for role, person in people.items()}
+        inactive = Employee(bitrix_id=1_900_000_000 + marker * 3 + len(tokens), first_name="Test",
+            last_name="inactive", local_role="employee", active=False, department_ids=[department_id])
+        db.add(inactive)
+        db.flush()
+        ids["inactive"] = inactive.id
+        bitrix_ids["inactive"] = inactive.bitrix_id
         db.commit()
     client = TestClient(app)
     headers = {role: {"Cookie": f"rtm_next_session={token}"} for role, token in tokens.items()}
@@ -71,6 +77,14 @@ def test_course_activation_campaign_launch_and_individual_visibility():
         assert preview.status_code == 200, preview.text
         assert preview.json()["task_title"] == "Read Test training: Test learner"
         assert "https://rtmgroupdocs.fvds.ru/education-next/app" in preview.json()["task_description"]
+        assert preview.json()["duplicates_excluded"] == 2
+        assert preview.json()["duplicate_recipients"] == ["Test learner"]
+        assert preview.json()["inactive_excluded"] == [{"bitrix_id": bitrix_ids["inactive"], "name": "Test inactive"}]
+        assert preview.json()["recipients"] == [{
+            "bitrix_id": bitrix_ids["learner"], "name": "Test learner", "source": "individual",
+            "due_at": preview.json()["due_at"], "task_title": preview.json()["task_title"],
+            "task_description": preview.json()["task_description"],
+        }]
         department_only = client.post("/admin/campaigns", headers=headers["teacher"], json={
             **payload, "recipient_bitrix_ids": [], "title": "Department only"})
         assert department_only.status_code == 201, department_only.text
