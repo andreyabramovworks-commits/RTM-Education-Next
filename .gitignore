@@ -1,0 +1,16 @@
+app/node_modules/
+app/dist/
+**/__pycache__/
+*.pyc
+.env
+.env.*
+!*.env.example
+**/data/
+RTM-Education-Next-spec/.playwright-cli/
+backend/.venv/
+private/
+rtm-next-test.tar.gz
+app/test-results/
+app/playwright-report/
+backups/
+deploy/logs/

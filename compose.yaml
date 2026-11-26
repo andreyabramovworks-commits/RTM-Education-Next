@@ -1,0 +1,62 @@
+name: rtm-education-next
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: rtm_education_next
+      POSTGRES_USER: rtm_next
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - next_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rtm_next -d rtm_education_next"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://rtm_next:${POSTGRES_PASSWORD}@db:5432/rtm_education_next
+      BITRIX_AUTH_FILE: /data/bitrix-auth.json
+      BITRIX_CLIENT_ID: ${BITRIX_CLIENT_ID:-}
+      BITRIX_CLIENT_SECRET: ${BITRIX_CLIENT_SECRET:-}
+      GOOGLE_CREDENTIALS_FILE: /data/google-credentials.json
+      GOOGLE_PROBE_DOCUMENT_ID: ${GOOGLE_PROBE_DOCUMENT_ID:-}
+    volumes:
+      - ./data:/data
+      - next_media:/media
+    depends_on:
+      db:
+        condition: service_healthy
+  worker:
+    build: ./backend
+    command: python -m app.worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://rtm_next:${POSTGRES_PASSWORD}@db:5432/rtm_education_next
+      BITRIX_AUTH_FILE: /data/bitrix-auth.json
+      BITRIX_CLIENT_ID: ${BITRIX_CLIENT_ID:-}
+      BITRIX_CLIENT_SECRET: ${BITRIX_CLIENT_SECRET:-}
+    volumes:
+      - ./data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+  migrate:
+    build: ./backend
+    command: alembic upgrade head
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgresql+psycopg://rtm_next:${POSTGRES_PASSWORD}@db:5432/rtm_education_next
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["migrate"]
+  frontend:
+    build: ./app
+    ports:
+      - "127.0.0.1:18094:80"
+    depends_on:
+      - api
+volumes:
+  next_pgdata:
+  next_media:

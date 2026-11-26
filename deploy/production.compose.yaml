@@ -1,0 +1,10 @@
+services:
+  frontend:
+    networks:
+      - default
+      - rtm_proxy
+
+networks:
+  rtm_proxy:
+    external: true
+    name: rtm-education_internal

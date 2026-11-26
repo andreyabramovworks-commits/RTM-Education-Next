@@ -1,0 +1,13 @@
+name: rtm-education-next-branding
+services:
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+    networks:
+      - rtm_proxy
+networks:
+  rtm_proxy:
+    external: true
+    name: rtm-education_internal

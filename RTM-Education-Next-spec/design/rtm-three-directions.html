@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>RTM Education — три направления</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Manrope, Arial, sans-serif;
+        background: #e9e5df;
+        color: #25201d;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      .switcher {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 14px 24px;
+        background: #25201d;
+        color: #fff;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+      }
+      .switcher strong {
+        font-size: 13px;
+        margin-right: 16px;
+      }
+      .switcher button {
+        border: 1px solid #6a625c;
+        background: transparent;
+        color: #e7dfd7;
+        padding: 9px 15px;
+        border-radius: 8px;
+        font-size: 12px;
+      }
+      .switcher button[aria-pressed="true"] {
+        background: #fff;
+        color: #25201d;
+        border-color: #fff;
+      }
+      .switcher span {
+        margin-left: auto;
+        font-size: 11px;
+        color: #bcb1a9;
+      }
+      .shell {
+        min-height: calc(100vh - 61px);
+        --bg: #faf7f3;
+        --paper: #fffdfa;
+        --ink: #25201d;
+        --muted: #786d66;
+        --line: #e5ded6;
+        --accent: #b9432a;
+        --wash: #f8eae4;
+        --nav: #fffdfa;
+        --navtext: #25201d;
+        --radius: 8px;
+        --font: Manrope, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font);
+      }
+      .shell[data-theme="2"] {
+        --bg: #f5f0e9;
+        --paper: #fffdfa;
+        --ink: #2e2722;
+        --muted: #766e65;
+        --line: #dcd2c7;
+        --accent: #92543d;
+        --wash: #f1e6d9;
+        --nav: #342b27;
+        --navtext: #f8f2ea;
+        --radius: 4px;
+        --font: "DM Sans", Arial, sans-serif;
+      }
+      .shell[data-theme="3"] {
+        --bg: #f6f4ef;
+        --paper: #fff;
+        --ink: #262723;
+        --muted: #6c7169;
+        --line: #dce0d8;
+        --accent: #556b48;
+        --wash: #e9eee4;
+        --nav: #f2f2ec;
+        --navtext: #262723;
+        --radius: 12px;
+        --font: Manrope, Arial, sans-serif;
+      }
+      .topbar {
+        background: var(--nav);
+        color: var(--navtext);
+        border-bottom: 1px solid var(--line);
+        padding: 0 35px;
+        display: flex;
+        align-items: center;
+        min-height: 68px;
+        gap: 45px;
+      }
+      .brand {
+        font-size: 17px;
+        font-weight: 800;
+        white-space: nowrap;
+        letter-spacing: -0.055em;
+      }
+      .brand em {
+        font-style: normal;
+        color: var(--accent);
+      }
+      .mainnav {
+        display: flex;
+        align-self: stretch;
+        gap: 24px;
+        overflow-x: auto;
+      }
+      .mainnav button {
+        white-space: nowrap;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: none;
+        color: inherit;
+        opacity: 0.66;
+        font-size: 12px;
+        padding: 0 2px;
+      }
+      .mainnav button.active {
+        opacity: 1;
+        border-color: var(--accent);
+        font-weight: 800;
+      }
+      .avatar {
+        margin-left: auto;
+        white-space: nowrap;
+        font-size: 11px;
+        opacity: 0.7;
+      }
+      .workspace {
+        max-width: 1480px;
+        margin: auto;
+        padding: 32px 40px 80px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      .heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 28px;
+      }
+      .heading h1 {
+        font-size: 33px;
+        line-height: 1.15;
+        letter-spacing: -0.05em;
+        margin: 0;
+      }
+      .heading p {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 8px 0 0;
+      }
+      .btn {
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--ink);
+        padding: 10px 15px;
+        border-radius: var(--radius);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .btn.primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+      }
+      .btn.primary:hover {
+        filter: brightness(0.9);
+      }
+      .bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 17px;
+        flex-wrap: wrap;
+      }
+      .bar input {
+        width: 310px;
+        padding: 10px 13px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        border-radius: var(--radius);
+        font-size: 12px;
+        color: var(--ink);
+      }
+      .bar select {
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        border-radius: var(--radius);
+        font: inherit;
+        font-size: 12px;
+        color: var(--ink);
+      }
+      .count {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .tablewrap {
+        border: 1px solid var(--line);
+        background: var(--paper);
+        border-radius: var(--radius);
+        overflow-x: auto;
+      }
+      .table {
+        width: 100%;
+        min-width: 940px;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .table th {
+        text-align: left;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+        padding: 15px 16px;
+        background: var(--bg);
+      }
+      .table td {
+        padding: 17px 16px;
+        border-top: 1px solid var(--line);
+      }
+      .table tr[data-open] {
+        cursor: pointer;
+      }
+      .table tr[data-open]:hover {
+        background: var(--wash);
+      }
+      .course-title {
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .course-sub {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        margin-top: 4px;
+      }
+      .status {
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+      }
+      .status:before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .status.draft:before {
+        background: #a29b92;
+      }
+      .metric {
+        font-variant-numeric: tabular-nums;
+      }
+      .more {
+        border: 0;
+        background: none;
+        font-size: 16px;
+        color: var(--muted);
+      }
+      .tabs {
+        display: flex;
+        gap: 30px;
+        border-bottom: 1px solid var(--line);
+        margin: 0 0 24px;
+      }
+      .tabs button {
+        padding: 0 0 13px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: none;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .tabs button.active {
+        border-color: var(--accent);
+        color: var(--ink);
+        font-weight: 800;
+      }
+      .course-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 270px;
+        gap: 24px;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        background: var(--paper);
+        border-radius: var(--radius);
+        padding: 26px;
+      }
+      .panel h2 {
+        font-size: 18px;
+        letter-spacing: -0.035em;
+        margin: 0 0 14px;
+      }
+      .panel p {
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+      .field {
+        display: grid;
+        gap: 7px;
+        margin-bottom: 18px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .field input,
+      .field textarea {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 11px;
+        background: var(--paper);
+        color: var(--ink);
+        width: 100%;
+      }
+      .field textarea {
+        min-height: 94px;
+        resize: vertical;
+      }
+      .rowitem {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-top: 1px solid var(--line);
+        padding: 15px 0;
+        font-size: 12px;
+      }
+      .rowitem strong {
+        flex: 1;
+      }
+      .handle {
+        cursor: grab;
+        color: var(--muted);
+        font-size: 16px;
+      }
+      .type {
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .side-note {
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      .preview {
+        max-width: 720px;
+        margin: auto;
+        background: var(--paper);
+        padding: 40px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      .preview h2 {
+        font-size: 29px;
+        letter-spacing: -0.05em;
+      }
+      .preview p {
+        line-height: 1.8;
+        color: var(--muted);
+      }
+      .empty {
+        padding: 70px 25px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .toast {
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        background: var(--ink);
+        color: #fff;
+        border-radius: 8px;
+        padding: 13px 17px;
+        font-size: 12px;
+        box-shadow: 0 10px 30px #0002;
+        z-index: 30;
+      }
+      .theme-note {
+        position: fixed;
+        bottom: 15px;
+        left: 18px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .shell[data-theme="2"] .heading h1 {
+        font-weight: 500;
+        letter-spacing: -0.06em;
+        font-size: 38px;
+      }
+      .shell[data-theme="2"] .tablewrap {
+        border-radius: 0;
+      }
+      .shell[data-theme="2"] .table th {
+        background: var(--paper);
+      }
+      .shell[data-theme="3"] .topbar {
+        min-height: 76px;
+      }
+      .shell[data-theme="3"] .table tr[data-open]:nth-child(2) {
+        background: transparent;
+      }
+      .shell[data-theme="3"] .panel {
+        box-shadow: 0 12px 30px #25201d0b;
+      }
+      @media (max-width: 900px) {
+        .topbar {
+          display: block;
+          padding: 18px;
+        }
+        .mainnav {
+          margin-top: 12px;
+          gap: 18px;
+          min-height: 36px;
+        }
+        .avatar {
+          display: none;
+        }
+        .workspace {
+          padding: 24px 16px;
+        }
+        .course-layout {
+          grid-template-columns: 1fr;
+        }
+        .table th:nth-child(n + 4),
+        .table td:nth-child(n + 4) {
+          display: none;
+        }
+        .switcher {
+          flex-wrap: wrap;
+        }
+        .switcher span {
+          display: none;
+        }
+      }
+      @media (max-width: 560px) {
+        .heading {
+          align-items: start;
+        }
+        .heading h1 {
+          font-size: 26px;
+        }
+        .bar input {
+          width: 100%;
+        }
+        .table th:nth-child(3),
+        .table td:nth-child(3) {
+          display: none;
+        }
+        .switcher strong {
+          width: 100%;
+        }
+        .mainnav {
+          font-size: 11px;
+        }
+      }
+      :focus-visible {
+        outline: 3px solid #8d6b45;
+        outline-offset: 2px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+          transition: none !important;
+        }
+      }
+      /* Вторая итерация: меньше рамок, больше иерархии и различий в композиции. */
+      .switcher {
+        background: #24201d;
+        padding: 12px 34px;
+        gap: 7px;
+      }
+      .switcher button {
+        border-radius: 5px;
+      }
+      .shell {
+        --bg: #f7f3ed;
+        --paper: #fffcf8;
+        --ink: #28221f;
+        --muted: #706660;
+        --line: #ded5cc;
+        --accent: #b84127;
+        --wash: #f7e8e0;
+        --nav: #f7f3ed;
+        --radius: 6px;
+      }
+      .topbar {
+        min-height: 74px;
+        padding: 0 48px;
+        gap: 56px;
+      }
+      .brand {
+        font-size: 19px;
+        letter-spacing: -0.06em;
+      }
+      .brand em {
+        font-weight: 500;
+      }
+      .mainnav {
+        gap: 25px;
+      }
+      .mainnav button {
+        font-size: 13px;
+      }
+      .workspace {
+        max-width: none;
+        padding: 44px 56px 100px;
+      }
+      .heading {
+        margin-bottom: 32px;
+      }
+      .heading h1 {
+        font-size: 39px;
+        font-weight: 800;
+      }
+      .heading p {
+        font-size: 13px;
+      }
+      .bar {
+        margin-bottom: 14px;
+      }
+      .bar input {
+        width: 350px;
+      }
+      .tablewrap {
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+      }
+      .table th {
+        background: var(--paper);
+        padding: 17px 18px;
+      }
+      .table td {
+        padding: 20px 18px;
+      }
+      .course-title {
+        font-size: 13px;
+      }
+      .course-sub {
+        display: none;
+      }
+      .table tbody tr:first-child {
+        background: var(--wash);
+      }
+      .table tbody tr:first-child td:first-child {
+        box-shadow: inset 2px 0 var(--accent);
+      }
+      .panel {
+        border-radius: 6px;
+      }
+      .shell[data-theme="2"] {
+        --bg: #fffdf9;
+        --paper: #fffdf9;
+        --ink: #2c2422;
+        --muted: #756966;
+        --line: #e0d4d0;
+        --accent: #9f443e;
+        --wash: #f7eae7;
+        --nav: #fffdf9;
+        --navtext: #2c2422;
+        --radius: 3px;
+        --font: Manrope, Arial, sans-serif;
+      }
+      .shell[data-theme="2"] .topbar {
+        border-bottom: 2px solid var(--ink);
+      }
+      .shell[data-theme="2"] .workspace {
+        padding: 56px 74px;
+      }
+      .shell[data-theme="2"] .heading h1 {
+        font-size: 46px;
+        font-weight: 800;
+      }
+      .shell[data-theme="2"] .heading p {
+        max-width: 420px;
+        line-height: 1.6;
+      }
+      .shell[data-theme="2"] .tablewrap {
+        border-top: 2px solid var(--ink);
+      }
+      .shell[data-theme="2"] .table td {
+        padding: 22px 18px;
+      }
+      .shell[data-theme="2"] .btn.primary {
+        border-radius: 2px;
+      }
+      .shell[data-theme="2"] .panel {
+        border: 0;
+        border-top: 2px solid var(--ink);
+        padding-left: 0;
+        padding-right: 0;
+      }
+      .shell[data-theme="3"] {
+        --bg: #eeeae3;
+        --paper: #fdfbf7;
+        --ink: #2b2723;
+        --muted: #716d65;
+        --line: #d9d4cc;
+        --accent: #92513a;
+        --wash: #eee3d9;
+        --nav: #eeeae3;
+        --navtext: #2b2723;
+        --radius: 10px;
+        --font: Manrope, Arial, sans-serif;
+      }
+      .shell[data-theme="3"] .topbar {
+        min-height: 82px;
+        border-bottom: 0;
+      }
+      .shell[data-theme="3"] .workspace {
+        max-width: 1320px;
+        background: var(--paper);
+        margin: 28px auto 0;
+        padding: 46px 50px 100px;
+        min-height: 700px;
+        border-radius: 14px;
+        box-shadow: 0 16px 40px #3b2d1f0b;
+      }
+      .shell[data-theme="3"] .heading h1 {
+        font-size: 35px;
+      }
+      .shell[data-theme="3"] .tablewrap {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+      }
+      .shell[data-theme="3"] .table th {
+        background: #f6f2eb;
+      }
+      .shell[data-theme="3"] .table tbody tr:first-child {
+        background: var(--wash);
+      }
+      .shell[data-theme="3"] .panel {
+        box-shadow: none;
+        background: #fffefa;
+      }
+      .shell[data-theme="3"] .btn.primary {
+        background: var(--ink);
+        border-color: var(--ink);
+      }
+      /* Итерация 3: три композиции вокруг выбранной тёплой рабочей поверхности. */
+      .shell[data-theme="1"] {
+        --bg: #e9e4dc;
+        --paper: #fffcf8;
+        --ink: #29231f;
+        --muted: #716760;
+        --line: #ded5cb;
+        --accent: #a93f29;
+        --wash: #f4e7de;
+        --nav: #e9e4dc;
+      }
+      .shell[data-theme="1"] .topbar {
+        border-bottom: 0;
+      }
+      .shell[data-theme="1"] .workspace {
+        max-width: 1350px;
+        margin: 22px auto 0;
+        min-height: 750px;
+        padding: 48px 54px 100px;
+        background: var(--paper);
+        border-radius: 12px 12px 0 0;
+        box-shadow: 0 14px 40px #392f270d;
+      }
+      .shell[data-theme="1"] .heading h1 {
+        font-size: 36px;
+      }
+      .shell[data-theme="1"] .tablewrap {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      .shell[data-theme="1"] .table th {
+        background: #f7f3ed;
+      }
+      .shell[data-theme="1"] .btn.primary {
+        background: var(--ink);
+        border-color: var(--ink);
+      }
+      .shell[data-theme="2"] {
+        --bg: #f6f3ee;
+        --paper: #fffefa;
+        --ink: #2d2925;
+        --muted: #736b63;
+        --line: #ded8d0;
+        --accent: #995640;
+        --wash: #f0e7df;
+        --nav: #f6f3ee;
+        --navtext: #2d2925;
+      }
+      .shell[data-theme="2"] .topbar {
+        min-height: 112px;
+        padding: 17px 44px 0;
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: 32px 54px;
+        gap: 8px 0;
+      }
+      .shell[data-theme="2"] .brand {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .shell[data-theme="2"] .mainnav {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        display: flex;
+        align-self: stretch;
+        gap: 32px;
+        overflow-x: auto;
+      }
+      .shell[data-theme="2"] .mainnav button {
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        min-height: 54px;
+        padding: 0 1px;
+        opacity: 0.75;
+      }
+      .shell[data-theme="2"] .mainnav button.active {
+        background: transparent;
+        color: #8e4533;
+        border-bottom-color: #995640;
+        box-shadow: none;
+        opacity: 1;
+      }
+      .shell[data-theme="2"] .avatar {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      .shell[data-theme="2"] .workspace {
+        width: 100%;
+        max-width: 1390px;
+        margin: 0 auto;
+        padding: 50px 52px 80px;
+      }
+      .shell[data-theme="2"] .heading {
+        align-items: center;
+        margin-bottom: 40px;
+      }
+      .shell[data-theme="2"] .heading h1 {
+        font-size: 39px;
+      }
+      .shell[data-theme="2"] .tablewrap {
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-radius: 0;
+      }
+      .shell[data-theme="2"] .table td {
+        padding: 18px 16px;
+      }
+      .shell[data-theme="2"] .table th {
+        background: var(--bg);
+      }
+      .shell[data-theme="2"] .table tbody tr:first-child {
+        background: #f4ebe3;
+      }
+      .shell[data-theme="2"] .btn.primary {
+        border-radius: 7px;
+      }
+      .shell[data-theme="3"] {
+        --bg: #e6e1d8;
+        --paper: #fffdfa;
+        --wash: #f1e7dc;
+      }
+      .shell[data-theme="3"] .workspace {
+        margin-top: 22px;
+        box-shadow: 0 14px 36px #3b2d1f12;
+      }
+      .shell[data-theme="3"] .table tbody tr:first-child {
+        background: var(--wash);
+      }
+      .shell[data-theme="3"] .table tbody tr:nth-child(2) {
+        background: var(--paper);
+      }
+      .shell[data-theme="3"] .table tbody tr:first-child td:first-child {
+        box-shadow: inset 2px 0 var(--accent);
+      }
+      .theme-note {
+        display: none;
+      }
+      @media (max-width: 900px) {
+        .shell[data-theme="2"] .topbar {
+          min-height: 0;
+          display: block;
+        }
+        .shell[data-theme="2"] .mainnav {
+          overflow-x: auto;
+        }
+        .shell[data-theme="2"] .mainnav button {
+          white-space: nowrap;
+        }
+        .shell[data-theme="2"] .avatar {
+          display: none;
+        }
+        .workspace,
+        .shell[data-theme="2"] .workspace,
+        .shell[data-theme="3"] .workspace {
+          margin: 0;
+          padding: 24px 16px;
+          border-radius: 0;
+        }
+        .topbar {
+          padding: 16px;
+          display: block;
+        }
+        .mainnav {
+          gap: 18px;
+        }
+        .heading h1,
+        .shell[data-theme="2"] .heading h1 {
+          font-size: 30px;
+        }
+        .table td {
+          padding: 16px 10px;
+        }
+        .table th {
+          padding: 13px 10px;
+        }
+      }
+      @media (max-width: 560px) {
+        .heading {
+          display: block;
+        }
+        .heading .btn {
+          margin-top: 16px;
+        }
+        .switcher {
+          padding: 10px 12px;
+        }
+        .mainnav {
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="switcher">
+      <strong>RTM · визуальные направления</strong
+      ><button data-theme-button="1" aria-pressed="true">
+        01 · Киноварь / рабочий лист</button
+      ><button data-theme-button="2" aria-pressed="false">
+        02 · Глина / открытая таблица</button
+      ><button data-theme-button="3" aria-pressed="false">
+        03 · Камень / фокус</button
+      ><span>Выберите стиль, затем откройте курс и вкладки</span>
+    </div>
+    <div class="shell" id="shell" data-theme="1">
+      <header class="topbar">
+        <div class="brand">RTM <em>Education</em></div>
+        <nav class="mainnav" id="nav"></nav>
+        <div class="avatar">Редактор · АН</div>
+      </header>
+      <main class="workspace" id="view"></main>
+      <div class="theme-note">
+        Концептуальный макет · демонстрационные данные
+      </div>
+    </div>
+    <script>
+      const navs = [
+        "Курсы",
+        "Управление редакциями",
+        "Центр проверок",
+        "База знаний",
+        "Сотрудники",
+        "Настройки",
+      ];
+      const courses = [
+        [
+          "Адаптация нового сотрудника",
+          "Опубликован",
+          "5 / 18",
+          "3",
+          "Анна Новикова",
+          "23.11.2026",
+        ],
+        [
+          "Информационная безопасность",
+          "Опубликован",
+          "4 / 12",
+          "1",
+          "Иван Петров",
+          "21.11.2026",
+        ],
+        [
+          "Работа с обращениями клиентов",
+          "Черновик",
+          "3 / 9",
+          "—",
+          "Мария Соколова",
+          "18.11.2026",
+        ],
+        [
+          "Внутренние процессы",
+          "Опубликован",
+          "6 / 22",
+          "2",
+          "Анна Новикова",
+          "15.11.2026",
+        ],
+      ];
+      let state = {
+        page: "Курсы",
+        course: false,
+        tab: "Описание",
+        query: "",
+        filter: "Все",
+        review: "Требует действий",
+        theme: "1",
+      };
+      const view = document.getElementById("view"),
+        shell = document.getElementById("shell");
+      function render() {
+        document.getElementById("nav").innerHTML = navs
+          .map(
+            (n) =>
+              `<button class="${state.page === n ? "active" : ""}" data-nav="${n}">${n}</button>`,
+          )
+          .join("");
+        if (state.page === "Курсы") {
+          if (state.course) {
+            view.innerHTML = `<div class="eyebrow"><button class="btn" data-back>← К курсам</button> &nbsp; / Адаптация нового сотрудника</div><div class="heading"><div><h1>Адаптация нового сотрудника</h1><p>Опубликован · Последовательное прохождение · Изменён 23.11.2026</p></div><button class="btn primary" data-action="Назначить обучение">Назначить обучение</button></div><div class="tabs">${["Описание", "Программа", "Предпросмотр"].map((t) => `<button data-tab="${t}" class="${state.tab === t ? "active" : ""}">${t}</button>`).join("")}</div>${state.tab === "Описание" ? `<div class="course-layout"><div class="panel"><h2>О курсе</h2><label class="field">Название<input value="Адаптация нового сотрудника"></label><label class="field">Цель<textarea>Помочь новому сотруднику освоить основные процессы компании и рабочие инструменты.</textarea></label><button class="btn" data-action="Черновик сохранён">Сохранить черновик</button></div><aside class="panel"><h2>Правила прохождения</h2><p>Последовательный курс. Следующий обязательный элемент доступен после завершения предыдущего.</p><div class="side-note">Редактирование доступно и во время активных кампаний. Завершённые результаты сотрудников сохраняются.</div></aside></div>` : state.tab === "Программа" ? `<div class="course-layout"><div class="panel"><div class="heading"><h2>Программа</h2><button class="btn" data-action="Добавить раздел">Добавить раздел</button></div><h2>01 · Знакомство с компанией</h2><div class="rowitem"><span class="handle" title="Перетащить">⠿</span><strong>О компании</strong><span class="type">Статья · обязательный</span></div><div class="rowitem"><span class="handle" title="Перетащить">⠿</span><strong>Правила работы</strong><span class="type">Google Docs · обязательный</span></div><div class="rowitem"><span class="handle" title="Перетащить">⠿</span><strong>Проверка знаний</strong><span class="type">Тест · обязательный</span></div><button class="btn" data-action="Выбор типа элемента">Добавить элемент курса</button></div><aside class="panel"><h2>Структура</h2><p>5 одноуровневых разделов<br>18 элементов</p><div class="side-note">Материалы переставляются мышью за ручку строки. Google Docs выбирается из каталога Базы знаний.</div></aside></div>` : `<article class="preview"><div class="eyebrow">Предпросмотр глазами сотрудника · без записи результата</div><h2>Адаптация нового сотрудника</h2><p>Начните с первого раздела. Обязательные материалы открываются последовательно.</p><button class="btn primary" data-action="Открыть первый материал">Начать просмотр</button></article>`}`;
+          } else {
+            let filtered = courses.filter(
+              (c) =>
+                (state.filter === "Все" || c[1] === state.filter) &&
+                c[0].toLowerCase().includes(state.query.toLowerCase()),
+            );
+            view.innerHTML = `<div class="eyebrow">Рабочее пространство / Курсы</div><div class="heading"><div><h1>Курсы</h1><p>Создавайте и обновляйте программу обучения. Назначения запускаются отдельно.</p></div><button class="btn primary" data-action="Создать курс">Создать курс</button></div><div class="bar"><input id="search" placeholder="Поиск по названию курса" value="${state.query}"><select id="filter"><option ${state.filter === "Все" ? "selected" : ""}>Все</option><option ${state.filter === "Опубликован" ? "selected" : ""}>Опубликован</option><option ${state.filter === "Черновик" ? "selected" : ""}>Черновик</option></select><button class="btn" data-action="Фильтры открыты">Фильтры</button><span class="count">${filtered.length} курса</span></div>${filtered.length ? `<div class="tablewrap"><table class="table"><thead><tr><th>Курс</th><th>Статус</th><th>Разделы / элементы</th><th>Активные кампании</th><th>Автор</th><th>Обновлён</th><th></th></tr></thead><tbody>${filtered.map((c) => `<tr ${c[0] === "Адаптация нового сотрудника" ? "data-open" : ""}><td><span class="course-title">${c[0]}</span><span class="course-sub">${c[0] === "Адаптация нового сотрудника" ? "Открыть программу и настройки курса" : "Демонстрационная строка"}</span></td><td><span class="status ${c[1] === "Черновик" ? "draft" : ""}">${c[1]}</span></td><td class="metric">${c[2]}</td><td class="metric">${c[3]}</td><td>${c[4]}</td><td class="metric">${c[5]}</td><td><button class="more" data-action="Все действия" aria-label="Все действия">⋯</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="tablewrap empty">Курсы не найдены. Измените запрос или фильтр.</div>`}`;
+          }
+        } else if (state.page === "Центр проверок") {
+          view.innerHTML = `<div class="eyebrow">Рабочее пространство / Центр проверок</div><div class="heading"><div><h1>Центр проверок</h1><p>Кампании, результаты и действия преподавателя</p></div></div><div class="tabs">${["Требует действий", "Проверка отдельных материалов", "Проверка курсов обучений"].map((t) => `<button data-review="${t}" class="${state.review === t ? "active" : ""}">${t}</button>`).join("")}</div>${state.review === "Требует действий" ? `<div class="panel"><h2>Требует действий</h2><p>Персональная очередь появится в следующей версии. Проверки уже доступны в двух соседних вкладках.</p></div>` : `<div class="bar"><input placeholder="Поиск по кампании или сотруднику"><button class="btn" data-action="Фильтры открыты">Фильтры</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Кампания</th><th>Статус</th><th>Сотрудники</th><th>Срок</th><th></th></tr></thead><tbody><tr><td><b>Адаптация нового сотрудника</b></td><td>В процессе</td><td>126</td><td>30.11.2026</td><td><button class="btn" data-action="Открыть кампанию">Открыть</button></td></tr></tbody></table></div>`}`;
+        } else {
+          view.innerHTML = `<div class="eyebrow">Рабочее пространство / ${state.page}</div><div class="heading"><h1>${state.page}</h1></div><div class="panel"><h2>${state.page === "База знаний" ? "Документы Google и видео" : "Область MVP"}</h2><p>${state.page === "База знаний" ? "Минимальный каталог Google Docs доступен для выбора в курсе. Управление папками и видео появится в следующей версии." : "Макет этой области будет проработан после выбора визуального направления."}</p></div>`;
+        }
+      }
+      function toast(t) {
+        document.querySelector(".toast")?.remove();
+        let x = document.createElement("div");
+        x.className = "toast";
+        x.textContent = t;
+        shell.append(x);
+        setTimeout(() => x.remove(), 2500);
+      }
+      document.addEventListener("click", (e) => {
+        let theme = e.target.closest("[data-theme-button]");
+        if (theme) {
+          state.theme = theme.dataset.themeButton;
+          shell.dataset.theme = state.theme;
+          document
+            .querySelectorAll("[data-theme-button]")
+            .forEach((b) =>
+              b.setAttribute("aria-pressed", String(b === theme)),
+            );
+          return;
+        }
+        let n = e.target.closest("[data-nav]");
+        if (n) {
+          state.page = n.dataset.nav;
+          state.course = false;
+          render();
+          return;
+        }
+        if (e.target.closest("[data-back]")) {
+          state.course = false;
+          render();
+          return;
+        }
+        let tab = e.target.closest("[data-tab]");
+        if (tab) {
+          state.tab = tab.dataset.tab;
+          render();
+          return;
+        }
+        let rev = e.target.closest("[data-review]");
+        if (rev) {
+          state.review = rev.dataset.review;
+          render();
+          return;
+        }
+        let action = e.target.closest("[data-action]");
+        if (action) {
+          toast(action.dataset.action + " · демонстрация макета");
+          return;
+        }
+        if (e.target.closest("[data-open]")) {
+          state.course = true;
+          state.tab = "Описание";
+          render();
+        }
+      });
+      document.addEventListener("input", (e) => {
+        if (e.target.id === "search") {
+          state.query = e.target.value;
+          let pos = e.target.selectionStart;
+          render();
+          let input = document.getElementById("search");
+          input.focus();
+          input.setSelectionRange(pos, pos);
+        }
+      });
+      document.addEventListener("change", (e) => {
+        if (e.target.id === "filter") {
+          state.filter = e.target.value;
+          render();
+        }
+      });
+      render();
+    </script>
+  </body>
+</html>
